@@ -14,3 +14,7 @@
 *.jpg    binary
 *.jpeg   binary
 *.gif    binary
+
+# Add Kage as a Language
+*.kage linguist-detectable=true
+*.kage linguist-language=Kage
