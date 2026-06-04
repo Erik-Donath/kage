@@ -29,7 +29,7 @@ int main(const int argc, const char *argv[]) {
 const char* read_file(const char* path) {
     FILE *file = fopen(path, "r");
     if (!file)
-        return nullptr;
+        return NULL;
 
     fseek(file, 0, SEEK_END);
     const size_t size = (size_t)ftell(file);
