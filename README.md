@@ -19,6 +19,49 @@ Programs operate on an infinite set of lazily initialized 32-bit registers, feat
 
 Read [Language.md](Language.md) for a complete Language breakdown.
 
+## Building
+
+Kage uses CMake and requires a C17-compatible compiler.
+
+### Requirements
+
+* CMake 3.20 or newer
+* GCC, Clang, or another C17-compatible compiler
+
+### Configure
+
+Clone the repository and create a build directory:
+
+```sh
+git clone https://github.com/Erik-Donath/kage.git
+cd kage
+
+mkdir build
+cd build
+
+cmake ..
+```
+
+### Build
+
+Compile the project with:
+
+```sh
+cmake --build .
+```
+
+This produces the `kage` executable in the build directory.
+
+### Run
+
+To execute a Kage program:
+
+```sh
+./kage ../test.kage
+```
+
+Replace `test.kage` with the path to your own source file.
+
 ## License
 
 Kage is licensed under the [MIT License](LICENSE).
