@@ -31,39 +31,45 @@ void token_vec_push(token_vec* vec, const token t) {
     vec->tokens[vec->len++] = t;
 }
 
+static const char* token_names[] = {
+    [STORE_LIT]     = "STORE_LIT",
+    [STORE_CPY]     = "STORE_CPY",
+    [STORE_EXP]     = "STORE_EXP",
+    [FLOW_LAB]      = "FLOW_LAB",
+    [FLOW_JMP]      = "FLOW_JMP",
+    [FLOW_COND_JMP] = "FLOW_COND_JMP",
+    [IO_PRINT]      = "IO_PRINT",
+    [IO_READ]       = "IO_READ",
+    [IO_DEC_PRINT]  = "IO_DEC_PRINT",
+    [NUM]           = "NUM",
+    [OP]            = "OP",
+    [LABEL]         = "LABEL",
+    [EOF_TOKEN]     = "EOF_TOKEN",
+};
+
 void token_dump(const token_vec* vec) {
-    static const char* token_names[0xFF] = {
-        [STORE_LIT]     = "STORE_LIT",
-        [STORE_CPY]     = "STORE_CPY",
-        [STORE_EXP]     = "STORE_EXP",
-        [FLOW_LAB]      = "FLOW_LAB",
-        [FLOW_JMP]      = "FLOW_JMP",
-        [FLOW_COND_JMP] = "FLOW_COND_JMP",
-        [IO_PRINT]      = "IO_PRINT",
-        [IO_READ]       = "IO_READ",
-        [IO_DEC_PRINT]  = "IO_DEC_PRINT",
-        [NUM]           = "NUM",
-        [OP]            = "OP",
-        [LABEL]         = "LABEL",
-        [EOF_TOKEN]     = "EOF_TOKEN",
-    };
+    printf("\n=== TOKEN DUMP ===\n");
 
     for (size_t i = 0; i < vec->len; ++i) {
-        const token t = vec->tokens[i];
+        const token* t = &vec->tokens[i];
+        printf("%04zu | %-13s ", i, token_names[t->type]);
 
-        switch (t.type) {
+        switch (t->type) {
             case NUM:
-                printf("%zu: %s(%#x) at line %d:%d with %d\n", i, token_names[t.type], t.type, t.line, t.column, t.num);
+                printf("%d", t->num);
                 break;
             case OP:
-                printf("%zu: %s(%#x) at line %d:%d with %c\n", i, token_names[t.type], t.type, t.line, t.column, t.op);
+                printf("'%c'", t->op);
                 break;
             case LABEL:
-                printf("%zu: %s(%#x) at line %d:%d with %s\n", i, token_names[t.type], t.type, t.line, t.column, t.str);
+                printf("\"%s\"", t->str);
                 break;
             default:
-                printf("%zu: %s(%#x) at line %d:%d\n", i, token_names[t.type], t.type, t.line, t.column);
                 break;
         }
+
+        printf("  [%d:%d]\n", t->line, t->column);
     }
+
+    printf("=== END TOKENS ===\n\n");
 }

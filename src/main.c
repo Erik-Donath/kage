@@ -24,10 +24,11 @@ int main(const int argc, const char *argv[]) {
     token_vec vec = lexer(file_contents);
     token_dump(&vec);
 
-    const ir_arr ir = parse(&vec);
-    (void)ir;
+    ir_arr ir = parse(&vec);
+    ir_dump(&ir);
 
     token_vec_free(&vec);
+    ir_arr_free(&ir);
     return 0;
 }
 

@@ -25,7 +25,7 @@ typedef enum {
     SUBTRACTION,
     MULTIPLICATION,
     DIVISION,
-    MODULO,
+    MODULUS,
 } ir_operation;
 
 typedef struct {
@@ -47,12 +47,9 @@ typedef struct {
             ir_operation op;
         } calc_register;
         struct {
-            uint32_t target;
-        } jmp;
-        struct {
-            uint32_t target;
+            size_t target;
             uint32_t cond;
-        } cond_jump;
+        } jmp;
         struct {
             uint32_t src;
         } io_out; // Used by IO_OUT and IO_DOUT
@@ -66,3 +63,7 @@ typedef struct {
     ir_instruction* instruction;
     size_t length;
 } ir_arr;
+
+void ir_arr_init(ir_arr* arr, size_t length);
+void ir_arr_free(ir_arr* arr);
+void ir_dump(const ir_arr* arr);
