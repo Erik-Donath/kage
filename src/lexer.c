@@ -21,16 +21,8 @@ typedef struct {
 #define CURRENT(l) (*(l)->current)
 #define PEEK(l) ((l)->current[1])
 #define AT_END(l) (CURRENT(l) == '\0')
-#define CONSUME(l) do {             \
-        if (CURRENT(l) == '\n') {   \
-            (l)->line++;            \
-           (l)->column = 1;         \
-        }                           \
-        else                        \
-            (l)->column++;          \
-        (l)->current++;             \
-    } while(0)
 
+#define CONSUME(l) lexer_consume(l)
 #define PUSH_TOKEN(l, t) token_vec_push(&(l)->tokens, (t));
 
 static const struct {
@@ -51,6 +43,16 @@ static const struct {
 };
 
 #define KEYWORD_COUNT (sizeof(keywords) / sizeof(keywords[0]))
+
+static void lexer_consume(lexer_state *l) {
+    if (CURRENT(l) == '\n') {
+        l->line++;
+        l->column = 1;
+    }
+    else
+        l->column++;
+    l->current++;
+}
 
 static void lexer_error(const lexer_state *l, const char *msg) {
     fprintf(stderr,
