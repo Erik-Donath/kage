@@ -36,7 +36,7 @@ const char* read_file(const char* path) {
     rewind(file);
 
     char *buffer = malloc(size + 1);
-    fread(buffer, 1, size, file);
+    (void)fread(buffer, 1, size, file);
     buffer[size] = '\0';
 
     fclose(file);
