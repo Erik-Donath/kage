@@ -1,18 +1,21 @@
 # Read one character
 Rei 1
 
-# If input != 0 jump to loop
-HIKARI loop 1
+# ASCII code of '0' is 48
+2 yami 48
+3 YAMI 1 - 2
 
-# Input was 0 -> terminate
+# If '0', jump to print
+HIKARI printOneInf 3
+
+# terminate
 rei 0
 
-hikari loop
-# Constant 1
-2 yami 1
+# Label 'printOneInf'
+hikari printOneInf
 
-# Print 1
-REI 2
+# Print the input
+rei 1
 
-# Infinite loop
-Hikari loop
+# Loop back
+Hikari printOneInf

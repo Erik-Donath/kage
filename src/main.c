@@ -5,24 +5,29 @@
 #include <main.h>
 #include <tokens.h>
 #include <lexer.h>
+#include <parser.h>
 #include <stdlib.h>
 #include <stdio.h>
 
 int main(const int argc, const char *argv[]) {
     if (argc < 2) {
-        printf("Kage Help: \n Use %s <FILE PATH> to run a kage file.\n\r", argv[0]);
+        printf("Kage Help: \n Use %s <FILE PATH> to run a kage file.\n", argv[0]);
         return 1;
     }
 
     const char* file_contents = read_file(argv[1]);
     if (!file_contents) {
-        printf("Failed to open File %s\n", argv[2]);
+        printf("Failed to open File %s\n", argv[1 ]);
         return 1;
     }
 
-    const token_vec vec = lexer(file_contents);
+    token_vec vec = lexer(file_contents);
     token_dump(&vec);
 
+    const ir_arr ir = parse(&vec);
+    (void)ir;
+
+    token_vec_free(&vec);
     return 0;
 }
 
