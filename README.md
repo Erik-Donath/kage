@@ -1,6 +1,7 @@
 # Kage
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![Language](https://img.shields.io/badge/Language-Kage-purple)](#)
 
 An ordinary Eso-Lang.
 
