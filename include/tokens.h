@@ -24,7 +24,6 @@ typedef enum {
     LABEL         = 104,
 
     EOF_TOKEN     = 105,
-    NONE          = 0,
 } token_type;
 // All Token types less than 100 result in an instruction inside the ir. All Tokens above and equals 100 will not result in an instruction.
 
