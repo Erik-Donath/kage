@@ -26,7 +26,7 @@ void token_vec_free(token_vec* vec) {
 void token_vec_push(token_vec* vec, const token t) {
     if (vec->len >= vec->cap) {
         vec->cap *= 2;
-        vec->tokens = realloc(vec->tokens, vec->cap * sizeof(t));
+        vec->tokens = realloc(vec->tokens, vec->cap * sizeof(vec->tokens[0]));
     }
     vec->tokens[vec->len++] = t;
 }

@@ -20,14 +20,22 @@ typedef struct {
 } patch_entry;
 
 typedef struct {
-    const token_vec* vec;
-    size_t           pos;
-    ir_instruction*  ir;
-    size_t           ir_idx;
-    label_entry*     labels;
-    size_t           label_idx;
-    patch_entry*     patches;
-    size_t           patch_idx;
+    uint32_t* regs;
+    size_t len;
+    size_t cap;
+} register_patch_vec;
+#define REGISTER_PATCH_VEC_INIT_CAP 256
+
+typedef struct {
+    const token_vec*    vec;
+    size_t              pos;
+    ir_instruction*     ir;
+    size_t              ir_idx;
+    label_entry*        labels;
+    size_t              label_idx;
+    patch_entry*        patches;
+    size_t              patch_idx;
+    register_patch_vec  register_vec;
 } parser_state;
 
 inline static void emit_ir(parser_state* p, const ir_instruction inst) {
@@ -46,6 +54,40 @@ inline static void emit_patch(parser_state* p, const char* patch) {
         .label = patch,
         .patch_index = p->ir_idx,
     };
+}
+
+static uint32_t patch_reg(parser_state* p, const uint32_t reg) {
+    register_patch_vec* vec = &p->register_vec;
+
+    // Do not patch zero register
+    if (reg == 0) {
+        return 0;
+    }
+
+    // Do not add a reg twice
+    for (size_t i = 0; i < vec->len; ++i) {
+        if (vec->regs[i] == reg)
+            return (uint32_t)(i + 1);
+    }
+
+    if (vec->len >= vec->cap) {
+        vec->cap *= 2;
+        vec->regs = realloc(vec->regs, vec->cap * sizeof(vec->regs[0]));
+    }
+    vec->regs[vec->len++] = reg;
+    return (uint32_t)vec->len;
+}
+
+static void register_dump(const parser_state* p) {
+    printf("\n=== REGISTER DUMP ===\n");
+    printf("%-6s  %-6s\n", "INTERN", "SOURCE");
+    printf("------  ------\n");
+
+    printf("%04d    %04d\n", 0, 0);
+    for (size_t i = 0; i < p->register_vec.len; ++i)
+        printf("%04zu    %04u\n", (i + 1), p->register_vec.regs[i]);
+
+    printf("=== END REGISTER ===\n\n");
 }
 
 inline static token advance(parser_state* p) {
@@ -104,7 +146,7 @@ static void parse_num(parser_state *p, const token t) {
             const token val = expect(p, NUM);
             emit_ir(p, (ir_instruction){
                 .type = INIT_REGISTER,
-                .init_register.dest = dest,
+                .init_register.dest = patch_reg(p, dest),
                 .init_register.literal = val.num,
             });
         } break;
@@ -112,8 +154,8 @@ static void parse_num(parser_state *p, const token t) {
             const token src = expect(p, NUM);
             emit_ir(p, (ir_instruction){
                 .type = COPY_REGISTER,
-                .copy_register.dest = dest,
-                .copy_register.src = src.reg,
+                .copy_register.dest = patch_reg(p, dest),
+                .copy_register.src = patch_reg(p, src.reg),
             });
         } break;
         case STORE_EXP: {
@@ -123,9 +165,9 @@ static void parse_num(parser_state *p, const token t) {
 
             emit_ir(p, (ir_instruction){
                 .type = CALC_REGISTER,
-                .calc_register.dest = dest,
-                .calc_register.src1 = src1.reg,
-                .calc_register.src2 = src2.reg,
+                .calc_register.dest = patch_reg(p, dest),
+                .calc_register.src1 = patch_reg(p, src1.reg),
+                .calc_register.src2 = patch_reg(p, src2.reg),
                 .calc_register.op = translate_operation(op.op),
             });
         } break;
@@ -164,6 +206,9 @@ ir_arr parse(const token_vec* vec) {
         .label_idx = 0,
         .patches = malloc(sizeof(patch_entry) * patch_count),
         .patch_idx = 0,
+        .register_vec.len = 0,
+        .register_vec.cap = REGISTER_PATCH_VEC_INIT_CAP,
+        .register_vec.regs = malloc(sizeof(uint32_t) * REGISTER_PATCH_VEC_INIT_CAP),
     };
 
     while (p.pos < p.vec->len) {
@@ -193,28 +238,28 @@ ir_arr parse(const token_vec* vec) {
                 emit_ir(&p, (ir_instruction){
                     .type = COND_JMP,
                     .jmp.target = 0,
-                    .jmp.cond = cond.reg,
+                    .jmp.cond = patch_reg(&p, cond.reg),
                 });
             } break;
             case IO_READ: {
                 const token dst = expect(&p, NUM);
                 emit_ir(&p, (ir_instruction){
                     .type = IO_IN,
-                    .io_in.dest = dst.reg,
+                    .io_in.dest = patch_reg(&p, dst.reg),
                 });
             } break;
             case IO_PRINT: {
                 const token src = expect(&p, NUM);
                 emit_ir(&p, (ir_instruction){
                     .type = IO_OUT,
-                    .io_out.src = src.reg,
+                    .io_out.src = patch_reg(&p, src.reg),
                 });
             } break;
             case IO_DEC_PRINT: {
                 const token src = expect(&p, NUM);
                 emit_ir(&p, (ir_instruction){
                     .type = IO_DOUT,
-                    .io_out.src = src.reg,
+                    .io_out.src = patch_reg(&p, src.reg),
                 });
             } break;
             case EOF_TOKEN:
@@ -246,10 +291,12 @@ ir_arr parse(const token_vec* vec) {
         }
     }
 
+    register_dump(&p);
+
     // Return
     free(p.labels);
     free(p.patches);
-
+    free(p.register_vec.regs);
     return (ir_arr){
         .instruction = p.ir,
         .length = inst_count,

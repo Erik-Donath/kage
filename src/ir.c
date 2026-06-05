@@ -73,6 +73,11 @@ void ir_dump(const ir_arr* arr) {
                        inst->jmp.target);
                 break;
             case IO_OUT:
+                printf("src=r%u",
+                    inst->io_out.src);
+                if (inst->io_out.src == 0)
+                    printf("  [HALT]");
+                break;
             case IO_DOUT:
                 printf("src=r%u",
                        inst->io_out.src);

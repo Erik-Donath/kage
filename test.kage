@@ -5,7 +5,7 @@ Rei 1
 2 yami 48
 3 YAMI 1 - 2
 
-# If '0', jump to print
+# If not '0', jump to print
 HIKARI printOneInf 3
 
 # terminate
