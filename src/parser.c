@@ -30,8 +30,6 @@ typedef struct {
     size_t           patch_idx;
 } parser_state;
 
-// Some of those could also be macros? But they dont need to. Maybe we should change this in lexer.c too?
-
 inline static void emit_ir(parser_state* p, const ir_instruction inst) {
     p->ir[p->ir_idx++] = inst;
 }
@@ -76,7 +74,6 @@ static token expect(parser_state* p, const token_type expected) {
 
     return t;
 }
-
 
 static ir_operation translate_operation(const char ch) {
     switch (ch) {
@@ -133,7 +130,10 @@ static void parse_num(parser_state *p, const token t) {
             });
         } break;
         default:
-            fprintf(stderr, "ParseErro(%d:%d): expected store keyword but got %s(%d)\n", kw.line, kw.column, token_names[kw.type], kw.type);
+            fprintf(stderr, "Parse error(%d:%d): expected store keyword but got %s(%d)\n",
+                kw.line, kw.column,
+                token_names[kw.type], kw.type
+            );
             exit(EXIT_FAILURE);
     }
 }
