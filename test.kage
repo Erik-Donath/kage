@@ -1,12 +1,12 @@
 # Read one character
-Rei 1
+Rei 1234
 
 # ASCII code of '0' is 48
-2 yami 48
-3 YAMI 1 - 2
+743902 yami 48
+3141592 YAMI 1234 - 743902
 
 # If not '0', jump to print
-HIKARI printOneInf 3
+HIKARI printOneInf 3141592
 
 # terminate
 rei 0
@@ -15,7 +15,7 @@ rei 0
 hikari printOneInf
 
 # Print the input
-rei 1
+rei 1234
 
 # Loop back
 Hikari printOneInf

@@ -300,5 +300,6 @@ ir_arr parse(const token_vec* vec) {
     return (ir_arr){
         .instruction = p.ir,
         .length = inst_count,
+        .register_count = p.register_vec.len,
     };
 }

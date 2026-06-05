@@ -62,6 +62,7 @@ typedef struct {
 typedef struct {
     ir_instruction* instruction;
     size_t length;
+    size_t register_count;
 } ir_arr;
 
 extern const char* ir_type_names[];
