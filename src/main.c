@@ -6,6 +6,7 @@
 #include <tokens.h>
 #include <lexer.h>
 #include <parser.h>
+#include <vm.h>
 #include <stdlib.h>
 #include <stdio.h>
 
@@ -22,13 +23,17 @@ int main(const int argc, const char *argv[]) {
     }
 
     token_vec vec = lexer(file_contents);
+    free((void*)file_contents);
     token_dump(&vec);
 
     ir_arr ir = parse(&vec);
+    token_vec_free(&vec);
     ir_dump(&ir);
 
-    token_vec_free(&vec);
+    printf("\n=== RUN ===\n");
+    run_vm(&ir);
     ir_arr_free(&ir);
+    printf("\n\n=== DONE ===\n");
     return 0;
 }
 
