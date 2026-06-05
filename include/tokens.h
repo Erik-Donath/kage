@@ -45,6 +45,8 @@ typedef struct {
     size_t len, cap;
 } token_vec;
 
+extern const char* token_names[];
+
 void token_vec_init(token_vec* vec);
 void token_vec_free(token_vec* vec);
 void token_vec_push(token_vec* vec, token token);

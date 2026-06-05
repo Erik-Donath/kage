@@ -28,8 +28,8 @@ static token expect(const token_vec* vec, size_t* i, const token_type expected) 
 
     const token t = vec->tokens[*i];
     if (expected != 0 && t.type != expected) {
-        fprintf(stderr, "ParseError (%d:%d): expected %d but got %d\n",
-            t.line, t.column, expected, t.type); // This could be improved with the Table of token_dump
+        fprintf(stderr, "ParseError (%d:%d): expected %s(%d) but got %s(%d)\n",
+            t.line, t.column, token_names[expected], expected, token_names[t.type], t.type);
         exit(EXIT_FAILURE);
     }
     return t;

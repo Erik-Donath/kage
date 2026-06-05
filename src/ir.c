@@ -16,7 +16,7 @@ void ir_arr_free(ir_arr* arr) {
     arr->length = 0;
 }
 
-static const char* ir_type_names[] = {
+const char* ir_type_names[] = {
     [INIT_REGISTER] = "INIT_REGISTER",
     [COPY_REGISTER] = "COPY_REGISTER",
     [CALC_REGISTER] = "CALC_REGISTER",
@@ -27,7 +27,7 @@ static const char* ir_type_names[] = {
     [IO_DOUT]       = "IO_DOUT",
 };
 
-static const char* op_names[] = {
+const char* op_names[] = {
     [ADDITION]       = "+",
     [SUBTRACTION]    = "-",
     [MULTIPLICATION] = "*",
@@ -37,58 +37,56 @@ static const char* op_names[] = {
 
 void ir_dump(const ir_arr* arr) {
     printf("\n=== IR DUMP ===\n");
+    printf("%-6s  %-14s  %s\n", "INDEX", "TYPE", "DATA");
+    printf("------  --------------  ----\n");
 
     for (size_t i = 0; i < arr->length; ++i) {
         const ir_instruction* inst = &arr->instruction[i];
-        printf("%04zu | ", i);
+
+        printf("%04zu    %-14s  ", i, ir_type_names[inst->type]);
 
         switch (inst->type) {
             case INIT_REGISTER:
-                printf("%s r%u <- %d\n",
-                       ir_type_names[inst->type],
+                printf("dest=r%u  val=%d",
                        inst->init_register.dest,
                        inst->init_register.literal);
                 break;
             case COPY_REGISTER:
-                printf("%s r%u <- r%u\n",
-                       ir_type_names[inst->type],
+                printf("dest=r%u  src=r%u",
                        inst->copy_register.dest,
                        inst->copy_register.src);
                 break;
             case CALC_REGISTER:
-                printf("%s r%u <- r%u %s r%u\n",
-                       ir_type_names[inst->type],
+                printf("dest=r%u  src1=r%u  op=%s  src2=r%u",
                        inst->calc_register.dest,
                        inst->calc_register.src1,
                        op_names[inst->calc_register.op],
                        inst->calc_register.src2);
                 break;
             case JMP:
-                printf("%s -> %zu\n",
-                       ir_type_names[inst->type],
+                printf("target=%04zu",
                        inst->jmp.target);
                 break;
             case COND_JMP:
-                printf("%s r%u -> %zu\n",
-                       ir_type_names[inst->type],
+                printf("cond=r%u  target=%04zu",
                        inst->jmp.cond,
                        inst->jmp.target);
                 break;
             case IO_OUT:
             case IO_DOUT:
-                printf("%s r%u\n",
-                       ir_type_names[inst->type],
+                printf("src=r%u",
                        inst->io_out.src);
                 break;
             case IO_IN:
-                printf("%s r%u\n",
-                       ir_type_names[inst->type],
+                printf("dest=r%u",
                        inst->io_in.dest);
                 break;
             default:
-                printf("UNKNOWN\n");
+                printf("UNKNOWN");
                 break;
         }
+
+        printf("\n");
     }
 
     printf("=== END IR ===\n\n");

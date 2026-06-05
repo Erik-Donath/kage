@@ -31,7 +31,7 @@ void token_vec_push(token_vec* vec, const token t) {
     vec->tokens[vec->len++] = t;
 }
 
-static const char* token_names[] = {
+const char* token_names[] = {
     [STORE_LIT]     = "STORE_LIT",
     [STORE_CPY]     = "STORE_CPY",
     [STORE_EXP]     = "STORE_EXP",
@@ -49,26 +49,25 @@ static const char* token_names[] = {
 
 void token_dump(const token_vec* vec) {
     printf("\n=== TOKEN DUMP ===\n");
+    printf("%-6s  %-16s  %-10s  %s\n", "INDEX", "TYPE", "LOC", "DATA");
+    printf("------  ----------------  ----------  ----\n");
 
     for (size_t i = 0; i < vec->len; ++i) {
         const token* t = &vec->tokens[i];
-        printf("%04zu | %-13s ", i, token_names[t->type]);
+        printf("%04zu    %-16s  ", i, token_names[t->type]);
+
+        char loc[16];
+        snprintf(loc, sizeof(loc), "%d:%d", t->line, t->column);
+        printf("%-10s  ", loc);
 
         switch (t->type) {
-            case NUM:
-                printf("%d", t->num);
-                break;
-            case OP:
-                printf("'%c'", t->op);
-                break;
-            case LABEL:
-                printf("\"%s\"", t->str);
-                break;
-            default:
-                break;
+            case NUM:   printf("val=%d",    t->num); break;
+            case OP:    printf("op='%c'",   t->op);  break;
+            case LABEL: printf("name=\"%s\"", t->str); break;
+            default:    break;
         }
 
-        printf("  [%d:%d]\n", t->line, t->column);
+        printf("\n");
     }
 
     printf("=== END TOKENS ===\n\n");
