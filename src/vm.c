@@ -12,7 +12,7 @@ typedef struct {
     int32_t* regs;
 } vm_state;
 
-inline static int32_t run_operator(const int32_t src1, const int32_t src2, const ir_operation op) {
+static int32_t run_operator(const int32_t src1, const int32_t src2, const ir_operation op) {
     switch (op) {
         case ADDITION:
             return src1 + src2;
@@ -33,13 +33,13 @@ inline static int32_t run_operator(const int32_t src1, const int32_t src2, const
     exit(EXIT_FAILURE);
 }
 
-inline static int32_t set_register(const vm_state* state, const size_t reg, const int32_t value) {
+static int32_t set_register(const vm_state* state, const size_t reg, const int32_t value) {
     if (reg == 0)
         return 0;
     return (state->regs[reg - 1] = value);
 }
 
-inline static int32_t get_register(const vm_state* state, const size_t reg) {
+static int32_t get_register(const vm_state* state, const size_t reg) {
     if (reg == 0)
         return 0;
     return state->regs[reg - 1];

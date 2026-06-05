@@ -38,18 +38,18 @@ typedef struct {
     register_patch_vec  register_vec;
 } parser_state;
 
-inline static void emit_ir(parser_state* p, const ir_instruction inst) {
+static void emit_ir(parser_state* p, const ir_instruction inst) {
     p->ir[p->ir_idx++] = inst;
 }
 
-inline static void emit_label(parser_state* p, const char* label) {
+static void emit_label(parser_state* p, const char* label) {
     p->labels[p->label_idx++] = (label_entry){
         .label = label,
         .target_index = p->ir_idx,
     };
 }
 
-inline static void emit_patch(parser_state* p, const char* patch) {
+static void emit_patch(parser_state* p, const char* patch) {
     p->patches[p->patch_idx++] = (patch_entry){
         .label = patch,
         .patch_index = p->ir_idx,
@@ -90,11 +90,11 @@ static void register_dump(const parser_state* p) {
     printf("=== END REGISTER ===\n\n");
 }
 
-inline static token advance(parser_state* p) {
+static token advance(parser_state* p) {
     return p->vec->tokens[++(p->pos)];
 }
 
-inline static token current(parser_state* p) {
+static token current(parser_state* p) {
     return p->vec->tokens[p->pos];
 }
 
