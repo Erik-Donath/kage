@@ -45,14 +45,16 @@ static int32_t get_register(const vm_state* state, const size_t reg) {
     return state->regs[reg - 1];
 }
 
-void run_vm(const ir_arr* ir) {
+void run_vm(const ir_arr* ir, const size_t max_steps) {
     vm_state vm = (vm_state) {
         .ir = ir,
         .pos = 0,
         .regs = calloc(ir->register_count, sizeof(int32_t)),
     };
 
-    while (vm.pos < vm.ir->length) {
+    size_t steps = 0;
+    while (vm.pos < vm.ir->length && !(max_steps && steps >= max_steps)) {
+        steps++;
         const ir_instruction inst = vm.ir->instruction[vm.pos];
         switch (inst.type) {
             case INIT_REGISTER: {

@@ -291,7 +291,7 @@ ir_arr parse(const token_vec* vec) {
         }
     }
 
-    register_dump(&p);
+    //register_dump(&p);
 
     // Return
     free(p.labels);

@@ -3,6 +3,7 @@
 //
 
 #include "main.h"
+#include "args.h"
 #include "version.h"
 #include "tokens.h"
 #include "lexer.h"
@@ -11,34 +12,10 @@
 #include <stdlib.h>
 #include <stdio.h>
 
-int main(const int argc, const char *argv[]) {
-    if (argc < 2) {
-        printf("Kage %s Help: \n Use %s <FILE PATH> to run a kage file.\n", KAGE_VERSION, argv[0]);
-        return 1;
-    }
-
-    const char* file_contents = read_file(argv[1]);
-    if (!file_contents) {
-        printf("Failed to open File %s\n", argv[1 ]);
-        return 1;
-    }
-
-    token_vec vec = lexer(file_contents);
-    free((void*)file_contents);
-    token_dump(&vec);
-
-    ir_arr ir = parse(&vec);
-    token_vec_free(&vec);
-    ir_dump(&ir);
-
-    printf("\n=== RUN ===\n");
-    run_vm(&ir);
-    ir_arr_free(&ir);
-    printf("\n\n=== DONE ===\n");
-    return 0;
-}
-
 const char* read_file(const char* path) {
+    if (!path)
+        return NULL;
+
     FILE *file = fopen(path, "r");
     if (!file)
         return NULL;
@@ -53,4 +30,60 @@ const char* read_file(const char* path) {
 
     fclose(file);
     return buffer;
+}
+
+int main(const int argc, const char *argv[]) {
+    const args a = parse_args(argc, argv);
+
+    if (a.flags & HELP) {
+        printf(
+            "Kage " KAGE_VERSION "\n"
+            "Usage: kage [options] <file>\n"
+            "       kage [options] -e <code>\n"
+            "\n"
+            "Options:\n"
+            "  -h, --help           Displays this help message\n"
+            "  -v, --version        Print kage version\n"
+            "  -e <code>            Execute given code directly\n"
+            "      --verbose        Enable debug output (token dump, ir dump)\n"
+            "      --max-steps N    Abort after N instructions (0 = unlimited)\n"
+            "\n"
+        );
+        return EXIT_SUCCESS;
+    }
+
+    if (a.flags & VERSION) {
+        printf("Kage " KAGE_VERSION "\n");
+        return EXIT_SUCCESS;
+    }
+
+    const char* code = (a.flags & CODE) ? a.code : read_file(a.file);
+    if (!code) {
+        fprintf(stderr, "Error: no code was given\n");
+        return EXIT_FAILURE;
+    }
+
+    token_vec vec = lexer(code);
+
+    if (!(a.flags & CODE))
+        free((void*)code);
+
+    if (a.flags & VERBOSE)
+        token_dump(&vec);
+
+    ir_arr ir = parse(&vec);
+    token_vec_free(&vec);
+
+    if (a.flags & VERBOSE) {
+        ir_dump(&ir);
+        printf("\n=== RUN ===\n");
+    }
+
+    run_vm(&ir, a.max_steps);
+    ir_arr_free(&ir);
+
+    if (a.flags & VERBOSE)
+        printf("\n\n=== DONE ===\n");
+
+    return 0;
 }

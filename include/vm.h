@@ -5,4 +5,4 @@
 #pragma once
 #include "ir.h"
 
-void run_vm(const ir_arr* ir);
+void run_vm(const ir_arr* ir, size_t max_steps);

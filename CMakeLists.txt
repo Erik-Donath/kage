@@ -30,6 +30,8 @@ file(
 add_executable(
         ${PROJECT_NAME}
         ${KAGE_SOURCES}
+        include/args.h
+        src/args.c
 )
 
 target_include_directories(
