@@ -39,8 +39,9 @@ const char* read_file(const char* path) {
 
 int main(const int argc, const char *argv[]) {
 #ifdef _WIN32
-    _setmode(_fileno(stdin),  _O_BINARY);
-    _setmode(_fileno(stdout), _O_BINARY);
+    // Set stdin to binary mode so \r\n in redirected input is not translated.
+    // stdout is left in text mode so output is captured correctly by CMake.
+    _setmode(_fileno(stdin), _O_BINARY);
 #endif
 
     const args a = parse_args(argc, argv);
@@ -95,5 +96,5 @@ int main(const int argc, const char *argv[]) {
     if (a.flags & VERBOSE)
         printf("\n\n=== DONE ===\n");
 
-    return 0;
+    return EXIT_SUCCESS;
 }
