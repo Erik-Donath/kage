@@ -17,10 +17,10 @@ Source Code (UTF-8)
         |  instruction count, label count, patch count
         v
     PARSER Pass 2: Code Generation
-        |  IR array + label map + patch list + register addresses normilazation
+        |  IR array + label map + patch list + register address normalization
         v
     PARSER Pass 3: Backpatching
-        |  IR with resolved jump targets (label map + path list). Error on not defined labels.
+        |  IR with resolved jump targets. Error on undefined labels.
         v
         VM
         |
@@ -52,7 +52,7 @@ The lexer reads the source character by character and produces a flat list of to
 | `LABEL`        | `[a-zA-Z]{1,31}` | string      |
 | `EOF_TOKEN`    | end of input     | none        |
 
-Token enum types with a numeric value below 100 correspond directly to an IR instruction. Token enum types 100 and above are structural tokens that produce no IR output (NUM, OP, LABEL, EOF_TOKEN).
+Token enum types with a numeric value below 100 correspond directly to an IR instruction. Token enum types 100 and above are structural tokens that produce no IR output (`NUM`, `OP`, `LABEL`, `EOF_TOKEN`).
 
 ### Scanning Rules
 
@@ -160,8 +160,8 @@ typedef struct {
 Register access goes through two helpers:
 
 ```c
-get_register(state, reg)   // returns 0 if reg == 0, else regs[reg - 1]
-set_register(state, reg, value)  // no-op if reg == 0, else regs[reg - 1] = value
+get_register(state, reg)            // returns 0 if reg == 0, else regs[reg - 1]
+set_register(state, reg, value)     // no-op if reg == 0, else regs[reg - 1] = value
 ```
 
 The offset of `reg - 1` accounts for the zero register occupying index 0 in the normalized scheme while not occupying a slot in the array.
@@ -170,12 +170,15 @@ The offset of `reg - 1` accounts for the zero register occupying index 0 in the 
 
 ```
 ip = 0
+steps = 0
 
 loop:
     if ip >= ir.length: halt
+    if max_steps > 0 and steps >= max_steps: halt
 
     fetch ir[ip]
     ip++
+    steps++
 
     INIT_REGISTER:  set(dest, literal)
     COPY_REGISTER:  set(dest, get(src))
@@ -183,13 +186,36 @@ loop:
     JMP:            ip = target; continue
     COND_JMP:       if get(cond) != 0: ip = target; continue
     IO_OUT:         c = get(src); if c == 0: halt; putchar(c)
-    IO_DOUT:        printf("%d", get(src))
+    IO_DOUT:        printf("%d\n", get(src))
     IO_IN:          c = getchar(); set(dest, c == EOF ? 0 : c)
 ```
 
 ### Arithmetic
 
 All arithmetic operates on 32-bit signed integers and wraps on overflow. Division and modulo return `0` when the right operand is zero.
+
+---
+
+## Command-Line Interface
+
+The interpreter is invoked as:
+
+```
+kage [options] <file>
+kage [options] -e <code>
+```
+
+Argument parsing is handled by a manual forward scan over `argv`. Flags and the file argument may appear in any order. The first non-flag argument is treated as the file path.
+
+| Flag | Description |
+|------|-------------|
+| `-h`, `--help` | Print usage and exit |
+| `-v`, `--version` | Print version and exit |
+| `-e <code>` | Execute the given string as Kage source |
+| `--verbose` | Enable debug output: token dump, IR dump, run markers |
+| `--max-steps N` | Halt after N instructions (0 = unlimited) |
+
+The version string is generated at build time from the CMake project version via `configure_file` and `version.h.in`.
 
 ---
 
@@ -205,8 +231,8 @@ All errors carry the line and column of the offending token.
 
 ---
 
-## Known Limitations in 0.1.0
+## Known Limitations
 
-- `rei` and `Rei` operate on single ASCII bytes. Multi-byte UTF-8 characters are not supported.
-- Debug output (token dump, register dump, IR dump) is always printed to stdout. There is no flag to suppress it.
+- `rei` and `Rei` operate on single ASCII bytes. Multi-byte UTF-8 input and output are not yet supported.
 - Division by zero and arithmetic overflow are defined behavior and produce no runtime error or warning.
+- CTest integration is planned for a future release.
