@@ -16,6 +16,11 @@ set(CMAKE_C_STANDARD 17)
 set(CMAKE_C_STANDARD_REQUIRED ON)
 set(CMAKE_C_EXTENSIONS ON)
 
+configure_file(
+        "${PROJECT_SOURCE_DIR}/include/version.h.in"
+        "${PROJECT_BINARY_DIR}/include/version.h"
+)
+
 file(
         GLOB_RECURSE KAGE_SOURCES
         CONFIGURE_DEPENDS
@@ -31,6 +36,7 @@ target_include_directories(
         ${PROJECT_NAME}
         PRIVATE
         ${PROJECT_SOURCE_DIR}/include
+        ${PROJECT_BINARY_DIR}/include
 )
 
 if(CMAKE_C_COMPILER_ID MATCHES "GNU|Clang")

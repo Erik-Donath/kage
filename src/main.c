@@ -2,17 +2,18 @@
 // Created by erikd on 04.06.26.
 //
 
-#include <main.h>
-#include <tokens.h>
-#include <lexer.h>
-#include <parser.h>
-#include <vm.h>
+#include "main.h"
+#include "version.h"
+#include "tokens.h"
+#include "lexer.h"
+#include "parser.h"
+#include "vm.h"
 #include <stdlib.h>
 #include <stdio.h>
 
 int main(const int argc, const char *argv[]) {
     if (argc < 2) {
-        printf("Kage Help: \n Use %s <FILE PATH> to run a kage file.\n", argv[0]);
+        printf("Kage %s Help: \n Use %s <FILE PATH> to run a kage file.\n", KAGE_VERSION, argv[0]);
         return 1;
     }
 

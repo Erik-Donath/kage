@@ -2,7 +2,7 @@
 // Created by erikd on 05.06.26.
 //
 
-#include <ir.h>
+#include "ir.h"
 #include <stdlib.h>
 #include <stdio.h>
 
