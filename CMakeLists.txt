@@ -7,7 +7,7 @@ set(PROJECT_HOMEPAGE    "https://www.erikdonath.de")
 
 project(
         kage
-        VERSION 0.2.0
+        VERSION 0.3.0
         DESCRIPTION "Kage Programming Language"
         LANGUAGES C
 )
