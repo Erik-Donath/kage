@@ -30,8 +30,6 @@ file(
 add_executable(
         ${PROJECT_NAME}
         ${KAGE_SOURCES}
-        include/args.h
-        src/args.c
 )
 
 target_include_directories(
@@ -53,6 +51,36 @@ if(CMAKE_C_COMPILER_ID MATCHES "GNU|Clang")
         -Wsign-conversion
     )
 endif()
+
+enable_testing()
+
+function(add_kage_test name expected)
+    set(kage_file   "${PROJECT_SOURCE_DIR}/tests/${name}.kage")
+    set(input_file  "${PROJECT_SOURCE_DIR}/tests/${name}.input")
+
+    if(NOT EXISTS "${kage_file}")
+        message(WARNING "add_kage_test: ${kage_file} not found, skipping '${name}'")
+        return()
+    endif()
+
+    # Pass empty string if no input file exists
+    if(NOT EXISTS "${input_file}")
+        set(input_file "")
+    endif()
+
+    add_test(
+            NAME ${name}
+            COMMAND ${CMAKE_COMMAND}
+            -DKAGE=$<TARGET_FILE:kage>
+            -DFILE=${kage_file}
+            -DEXPECTED=${expected}
+            -DINPUT_FILE=${input_file}
+            -P "${PROJECT_SOURCE_DIR}/tests/run_test.cmake"
+    )
+endfunction()
+
+add_kage_test(hi        "Hi")
+add_kage_test(echo_char "A")
 
 message(STATUS "Project      : ${PROJECT_NAME}")
 message(STATUS "Version      : ${PROJECT_VERSION}")
