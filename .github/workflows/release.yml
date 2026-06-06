@@ -1,0 +1,49 @@
+name: Release
+
+on:
+    release:
+        types: [published]
+
+jobs:
+    build:
+        name: Build (${{ matrix.os }})
+        runs-on: ${{ matrix.os }}
+
+        strategy:
+            matrix:
+                include:
+                    - os: ubuntu-latest
+                      artifact_name: kage
+                      asset_name: kage-linux-x86_64
+
+                    - os: windows-latest
+                      artifact_name: kage.exe
+                      asset_name: kage-windows-x86_64.exe
+
+                    - os: macos-latest
+                      artifact_name: kage
+                      asset_name: kage-macos-x86_64
+
+        steps:
+            - name: Checkout
+              uses: actions/checkout@v4
+
+            - name: Configure
+              run: cmake -B build -DCMAKE_BUILD_TYPE=Release
+
+            - name: Build
+              run: cmake --build build --config Release
+
+            - name: Rename artifact (Unix)
+              if: runner.os != 'Windows'
+              run: mv build/${{ matrix.artifact_name }} build/${{ matrix.asset_name }}
+
+            - name: Rename artifact (Windows)
+              if: runner.os == 'Windows'
+              run: move build\Release\${{ matrix.artifact_name }} build\${{ matrix.asset_name }}
+              shell: cmd
+
+            - name: Upload to release
+              uses: softprops/action-gh-release@v2
+              with:
+                  files: build/${{ matrix.asset_name }}

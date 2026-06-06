@@ -17,7 +17,8 @@ Kage is a minimal register-based esoteric programming language built around thre
 
 Programs operate on an infinite set of lazily initialized 32-bit registers, featuring arithmetic operations, conditional jumps, character I/O, and a dedicated zero register.
 
-Read [Language.md](Language.md) for a complete Language breakdown.
+Read [Language](Language.md) for a complete Language breakdown. 
+Or read [Implementation](Implementation.md) for a breakdown of what happens inside the kage interpreter.
 
 ## Building
 

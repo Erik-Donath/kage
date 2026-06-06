@@ -117,7 +117,7 @@ REI instructions handle input and output.
 
 ### `rei S`
 
-Prints `reg[S]` as a UTF-8 character to standard output. If `reg[S]` is `0`, the program terminates immediately.
+Prints `reg[S]` as an ASCII character to standard output. If `reg[S]` is `0`, the program terminates immediately.
 
 ```kage
 rei 1
@@ -125,7 +125,7 @@ rei 1
 
 ### `Rei S`
 
-Reads one UTF-8 character from standard input and stores its Unicode code point in register `S`.
+Reads one ASCII character from standard input and stores its value in register `S`.
 
 ```kage
 Rei 2
@@ -231,11 +231,8 @@ rei 0
 ### Echo (reads and reprints characters until null byte)
 
 ```kage
-2 yami 0 # Termination Key
 hikari top
 Rei 1
 rei 1
-1 YAMI 1 - 2
 Hikari top
-Rei 0
 ```
