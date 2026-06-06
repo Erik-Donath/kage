@@ -12,6 +12,13 @@
 #include <stdlib.h>
 #include <stdio.h>
 
+#ifdef _WIN32
+#include <fcntl.h>
+#include <io.h>
+_setmode(_fileno(stdin),  _O_BINARY);
+_setmode(_fileno(stdout), _O_BINARY);
+#endif
+
 const char* read_file(const char* path) {
     if (!path)
         return NULL;
