@@ -17,7 +17,7 @@ const char* read_file(const char* path) {
     if (!path)
         return NULL;
 
-    FILE *file = fopen(path, "r");
+    FILE *file = fopen(path, "rb");
     if (!file)
         return NULL;
 
@@ -28,6 +28,7 @@ const char* read_file(const char* path) {
     char *buffer = malloc(size + 1);
     const size_t read = fread(buffer, 1, size, file);
     if (read != size) {
+        fprintf(stderr, "Error reading file\n");
         free(buffer);
         fclose(file);
         return NULL;
