@@ -54,9 +54,10 @@ endif()
 
 enable_testing()
 
-function(add_kage_test name expected)
-    set(kage_file   "${PROJECT_SOURCE_DIR}/tests/${name}.kage")
-    set(input_file  "${PROJECT_SOURCE_DIR}/tests/${name}.input")
+function(add_kage_test name)
+    set(kage_file       "${PROJECT_SOURCE_DIR}/tests/${name}.kage")
+    set(input_file      "${PROJECT_SOURCE_DIR}/tests/${name}.input")
+    set(expected_file   "${PROJECT_SOURCE_DIR}/tests/${name}.output")
 
     if(NOT EXISTS "${kage_file}")
         message(WARNING "add_kage_test: ${kage_file} not found, skipping '${name}'")
@@ -67,20 +68,24 @@ function(add_kage_test name expected)
     if(NOT EXISTS "${input_file}")
         set(input_file "")
     endif()
+    # Pass empty string if no expected file exists
+    if(NOT EXISTS "${expected_file}")
+        set(expected_file "")
+    endif()
 
     add_test(
             NAME ${name}
             COMMAND ${CMAKE_COMMAND}
             -DKAGE=$<TARGET_FILE:kage>
             -DFILE=${kage_file}
-            -DEXPECTED=${expected}
-            -DINPUT_FILE=${input_file}
+            -DEXPECTED=${expected_file}
+            -DINPUT=${input_file}
             -P "${PROJECT_SOURCE_DIR}/tests/run_test.cmake"
     )
 endfunction()
 
-add_kage_test(hi        "Hi")
-add_kage_test(echo_char "A")
+add_kage_test(hi)
+add_kage_test(echo_char)
 
 message(STATUS "Project      : ${PROJECT_NAME}")
 message(STATUS "Version      : ${PROJECT_VERSION}")

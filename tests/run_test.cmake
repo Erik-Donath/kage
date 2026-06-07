@@ -1,31 +1,33 @@
-# Called by CTest via cmake -P.
+# Variables (passed via -D):
 #   KAGE        path to kage binary
 #   FILE        path to .kage source file
-#   EXPECTED    expected stdout output
-#   INPUT_FILE  path to file used as stdin, or empty string for no input
+#   EXPECTED    path to .output file
+#   INPUT       path to .input file, or empty string
 
-if(INPUT_FILE AND EXISTS "${INPUT_FILE}")
+if(INPUT AND EXISTS "${INPUT}")
     execute_process(
-            COMMAND         ${KAGE} ${FILE}
-            INPUT_FILE      ${INPUT_FILE}
-            OUTPUT_VARIABLE actual
-            ERROR_VARIABLE  ignored
+            COMMAND ${KAGE} ${FILE} -i ${INPUT} -o ${FILE}.result --max-steps 10000
+            ERROR_VARIABLE ignored
     )
 else()
     execute_process(
-            COMMAND         ${KAGE} ${FILE}
-            OUTPUT_VARIABLE actual
-            ERROR_VARIABLE  ignored
+            COMMAND ${KAGE} ${FILE} -o ${FILE}.result --max-steps 10000
+            ERROR_VARIABLE ignored
     )
 endif()
 
-string(STRIP "${actual}"   actual)
-string(STRIP "${EXPECTED}" expected_clean)
+file(READ "${FILE}.result"  actual)
+file(READ "${EXPECTED}"     expected)
 
-if(NOT actual STREQUAL expected_clean)
+string(STRIP "${actual}"   actual)
+string(STRIP "${expected}" expected)
+
+file(REMOVE "${FILE}.result")
+
+if(NOT actual STREQUAL expected)
     message(FATAL_ERROR
             "Test FAILED: ${FILE}\n"
-            "  expected: [${expected_clean}]\n"
+            "  expected: [${expected}]\n"
             "  got:      [${actual}]"
     )
 endif()
