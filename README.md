@@ -2,6 +2,7 @@
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Language](https://img.shields.io/badge/Language-Kage-purple)](#)
+[![CI](https://github.com/Erik-Donath/kage/actions/workflows/ci.yml/badge.svg?branch=master)](https://github.com/Erik-Donath/kage/actions/workflows/ci.yml)
 
 An ordinary Eso-Lang.
 
@@ -27,11 +28,13 @@ kage [options] <file>
 kage [options] -e <code>
 
 Options:
-  -h, --help           Show this help message and exit
-  -v, --version        Print version and exit
-  -e <code>            Execute code directly
-      --verbose        Enable debug output (token dump, IR dump)
-      --max-steps N    Abort after N instructions (0 = unlimited)
+  -h, --help                 Show this help message and exit
+  -v, --version              Print version and exit
+  -e <code>                  Execute code directly
+  -i <file> --input <file>   Uses the content of an file instead of stdin for VM input
+  -o <file> --output <file>  Prints the VM Output to an file instead of stdout
+      --verbose              Enable debug output (token dump, IR dump)
+      --max-steps N          Abort after N instructions (0 = unlimited)
 ```
 
 ## Building
