@@ -19,6 +19,7 @@ args parse_args(const int argc, const char* argv[]) {
         .flags = 0x0,
         .file = NULL,
         .max_steps = 0,
+        .input = NULL,
     };
 
     for (int i = 1; i < argc; ++i) {
@@ -43,6 +44,28 @@ args parse_args(const int argc, const char* argv[]) {
 
             a.flags |= CODE;
             a.code = argv[i];
+            continue;
+        }
+        if (strcmp(arg, "-i") == 0 || strcmp(arg, "--input") == 0) {
+            i++;
+            if (i >= argc) {
+                fprintf(stderr, "Error: -i requires an argument\n");
+                exit(EXIT_FAILURE);
+            }
+
+            a.flags |= INPUT;
+            a.input = argv[i];
+            continue;
+        }
+        if (strcmp(arg, "-o") == 0 || strcmp(arg, "--output") == 0) {
+            i++;
+            if (i >= argc) {
+                fprintf(stderr, "Error: -o requires an argument\n");
+                exit(EXIT_FAILURE);
+            }
+
+            a.flags |= OUTPUT;
+            a.output = argv[i];
             continue;
         }
         if (strcmp(arg, "--verbose") == 0) {

@@ -12,10 +12,6 @@
 #include <stdlib.h>
 #include <stdio.h>
 
-#ifdef _WIN32
-#include <fcntl.h>
-#include <io.h>
-#endif
 
 const char* read_file(const char* path) {
     if (!path)
@@ -38,12 +34,6 @@ const char* read_file(const char* path) {
 }
 
 int main(const int argc, const char *argv[]) {
-#ifdef _WIN32
-    // Set stdin to binary mode so \r\n in redirected input is not translated.
-    // stdout is left in text mode so output is captured correctly by CMake.
-    _setmode(_fileno(stdin), _O_BINARY);
-#endif
-
     const args a = parse_args(argc, argv);
 
     if (a.flags & HELP) {
@@ -53,11 +43,13 @@ int main(const int argc, const char *argv[]) {
             "       kage [options] -e <code>\n"
             "\n"
             "Options:\n"
-            "  -h, --help           Displays this help message\n"
-            "  -v, --version        Print kage version\n"
-            "  -e <code>            Execute given code directly\n"
-            "      --verbose        Enable debug output (token dump, ir dump)\n"
-            "      --max-steps N    Abort after N instructions (0 = unlimited)\n"
+            "  -h,       --help           Displays this help message\n"
+            "  -v,       --version        Print kage version\n"
+            "  -e <code>                  Execute given code directly\n"
+            "  -i <file> --input <file>   Uses the content of an file instead of stdin for VM input\n"
+            "  -o <file> --output <file>  Prints the VM Output to an file instead of stdout\n"
+            "            --verbose        Enable debug output (token dump, ir dump)\n"
+            "            --max-steps N    Abort after N instructions (0 = unlimited)\n"
             "\n"
         );
         return EXIT_SUCCESS;
@@ -90,7 +82,7 @@ int main(const int argc, const char *argv[]) {
         printf("\n=== RUN ===\n");
     }
 
-    run_vm(&ir, a.max_steps);
+    run_vm(&ir, &a);
     ir_arr_free(&ir);
 
     if (a.flags & VERBOSE)

@@ -6,11 +6,13 @@
 #include <stddef.h>
 
 typedef enum {
-    HELP = 0x1,
-    VERSION = 0x2,
-    CODE = 0x4,
-    VERBOSE = 0x8,
-    MAX_STEPS = 0x10,
+    HELP        = 0x01,
+    VERSION     = 0x02,
+    CODE        = 0x04,
+    VERBOSE     = 0x08,
+    MAX_STEPS   = 0x10,
+    INPUT       = 0x20,
+    OUTPUT      = 0x40,
 } args_flags;
 
 typedef struct {
@@ -21,6 +23,8 @@ typedef struct {
         const char* file;
         const char* code;
     };
+    const char* input;
+    const char* output;
 } args;
 
 args parse_args(int argc, const char* argv[]);
