@@ -7,14 +7,22 @@
 if(INPUT AND EXISTS "${INPUT}")
     execute_process(
             COMMAND ${KAGE} ${FILE} -i ${INPUT} -o ${FILE}.result --max-steps 10000
-            ERROR_VARIABLE ignored
+            RESULT_VARIABLE result
+            OUTPUT_VARIABLE stdout
+            ERROR_VARIABLE stderr
     )
 else()
     execute_process(
             COMMAND ${KAGE} ${FILE} -o ${FILE}.result --max-steps 10000
-            ERROR_VARIABLE ignored
+            RESULT_VARIABLE result
+            OUTPUT_VARIABLE stdout
+            ERROR_VARIABLE stderr
     )
 endif()
+
+message("result=${result}")
+message("stdout=${stdout}")
+message("stderr=${stderr}")
 
 file(READ "${FILE}.result"  actual)
 file(READ "${EXPECTED}"     expected)
