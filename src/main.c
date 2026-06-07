@@ -96,5 +96,6 @@ int main(const int argc, const char *argv[]) {
     if (a.flags & VERBOSE)
         printf("\n\n=== DONE ===\n");
 
+    fflush(stdout);
     return EXIT_SUCCESS;
 }
