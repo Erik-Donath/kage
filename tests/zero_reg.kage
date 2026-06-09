@@ -1,0 +1,14 @@
+# zero_reg: writing to r0 is silently ignored, reading r0 always gives 0
+# Attempt to store 99 in r0 -> ignored, r0 stays 0
+# HIKARI skip 0 -> r0==0, jump not taken
+# rei 1 prints 'c' (99)
+1 yami 99   # 'c'
+0 yami 99   # write to r0, silently ignored
+
+HIKARI skip 0  # r0 == 0, not taken
+
+rei 1
+rei 0
+
+hikari skip
+rei 0

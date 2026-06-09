@@ -1,0 +1,8 @@
+# arith_mod: r3 = r1 % r2, print r3 as decimal
+# 17 % 5 = 2
+1 yami 17
+2 yami 5
+3 YAMI 1 % 2
+
+REI 3
+rei 0

@@ -1,0 +1,8 @@
+# arith_mul: r3 = r1 * r2, print r3 as decimal
+# 6 * 7 = 42
+1 yami 6
+2 yami 7
+3 YAMI 1 * 2
+
+REI 3
+rei 0

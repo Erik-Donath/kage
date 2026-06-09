@@ -1,0 +1,8 @@
+# arith_div: r3 = r1 / r2, print r3 as decimal
+# 17 / 4 = 4
+1 yami 17
+2 yami 4
+3 YAMI 1 / 2
+
+REI 3
+rei 0

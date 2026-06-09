@@ -84,8 +84,24 @@ function(add_kage_test name)
     )
 endfunction()
 
+# Existing tests
 add_kage_test(hi)
 add_kage_test(echo_char)
+add_kage_test(store_lit)       # yami  - store literal
+add_kage_test(copy_register)   # Yami  - copy register
+add_kage_test(arith_add)       # YAMI + - addition
+add_kage_test(arith_sub)       # YAMI - - subtraction
+add_kage_test(arith_mul)       # YAMI * - multiplication
+add_kage_test(arith_div)       # YAMI / - division
+add_kage_test(arith_mod)       # YAMI % - modulo
+add_kage_test(div_zero)        # division and modulo by zero produce 0
+add_kage_test(jmp)             # Hikari - unconditional jump
+add_kage_test(cond_jmp_taken)  # HIKARI - conditional jump taken (nonzero)
+add_kage_test(cond_jmp_skip)   # HIKARI - conditional jump not taken (zero)
+add_kage_test(loop)            # hikari + HIKARI - loop with countdown
+add_kage_test(dec_print)       # REI - decimal print
+add_kage_test(char_input)      # Rei - character read
+add_kage_test(zero_reg)        # r0 reads as 0, writes are ignored
 
 message(STATUS "Project      : ${PROJECT_NAME}")
 message(STATUS "Version      : ${PROJECT_VERSION}")

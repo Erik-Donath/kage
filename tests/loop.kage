@@ -1,0 +1,14 @@
+# loop: print 'A' 3 times using a countdown loop
+# r1 = 'A' (65), r2 = 1 (decrement), r3 = 3 (counter)
+1 yami 65
+2 yami 1
+3 yami 3
+
+hikari top
+
+rei 1
+
+3 YAMI 3 - 2
+HIKARI top 3
+
+rei 0

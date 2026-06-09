@@ -1,0 +1,8 @@
+# store_lit: store literal values into registers and print as chars
+# Prints "OK"
+1 yami 79  # 'O'
+2 yami 75  # 'K'
+
+rei 1
+rei 2
+rei 0

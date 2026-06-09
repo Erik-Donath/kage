@@ -1,0 +1,13 @@
+# jmp: unconditional jump skips the 'N', prints 'Y'
+# Y=89, N=78
+1 yami 89  # 'Y'
+2 yami 78  # 'N'
+
+Hikari done
+
+rei 2      # skipped
+rei 0      # skipped
+
+hikari done
+rei 1
+rei 0

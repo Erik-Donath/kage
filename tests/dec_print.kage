@@ -1,0 +1,8 @@
+# dec_print: REI prints a signed decimal integer
+# prints "-42" then "100"
+1 yami -42
+2 yami 100
+
+REI 1
+REI 2
+rei 0

@@ -1,0 +1,17 @@
+# div_zero: division and modulo by zero both produce 0
+# r3 = r1 / r2 (r2=0) -> 0
+# r4 = r1 % r2 (r2=0) -> 0
+# prints "00"
+1 yami 42
+2 yami 0
+3 YAMI 1 / 2
+4 YAMI 1 % 2
+
+# Add 48 ('0') to get printable digit
+5 yami 48
+6 YAMI 3 + 5
+7 YAMI 4 + 5
+
+rei 6
+rei 7
+rei 0

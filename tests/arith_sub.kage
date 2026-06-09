@@ -1,0 +1,8 @@
+# arith_sub: r3 = r1 - r2, print r3 as decimal
+# 10 - 3 = 7
+1 yami 10
+2 yami 3
+3 YAMI 1 - 2
+
+REI 3
+rei 0

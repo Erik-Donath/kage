@@ -1,0 +1,14 @@
+# cond_jmp_skip: r1 == 0, so jump is NOT taken, prints 'N'
+# Y=89, N=78
+1 yami 0   # zero -> jump not taken
+2 yami 89  # 'Y'
+3 yami 78  # 'N'
+
+HIKARI yes 1
+
+rei 3      # taken: prints 'N'
+rei 0
+
+hikari yes
+rei 2      # skipped
+rei 0

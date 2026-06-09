@@ -1,0 +1,7 @@
+# copy_register: copy r1 into r2, print r2
+# Prints "A"
+1 yami 65  # 'A'
+2 Yami 1   # r2 = r1
+
+rei 2
+rei 0
