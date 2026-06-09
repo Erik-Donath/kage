@@ -107,15 +107,16 @@ static void exec(vm_state* vm) {
             const int32_t value2 = get(vm, inst.calc_register.src2);
             set(vm, inst.calc_register.dest, calc(value1, value2, inst.calc_register.op));
         } break;
-        case JMP:
+        case JMP: {
             vm->pos = inst.jmp.target;
             return;
-        case COND_JMP:
+        }
+        case COND_JMP: {
             if (get(vm, inst.jmp.cond) != 0) {
                 vm->pos = inst.jmp.target;
                 return;
             }
-            break;
+        } break;
         case IO_OUT: {
             const int32_t c = get(vm, inst.io_out.src);
             if (c == 0) {
