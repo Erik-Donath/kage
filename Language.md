@@ -133,7 +133,7 @@ Rei 2
 
 ### `REI S`
 
-Prints `reg[S]` as a signed decimal integer followed by a newline. Intended for debugging.
+Prints `reg[S]` as a signed decimal integer. Intended for debugging.
 
 ```kage
 REI 1

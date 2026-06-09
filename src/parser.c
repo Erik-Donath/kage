@@ -78,18 +78,6 @@ static uint32_t patch_reg(parser_state* p, const uint32_t reg) {
     return (uint32_t)vec->len;
 }
 
-static void register_dump(const parser_state* p) {
-    printf("\n=== REGISTER DUMP ===\n");
-    printf("%-6s  %-6s\n", "INTERN", "SOURCE");
-    printf("------  ------\n");
-
-    printf("%04d    %04d\n", 0, 0);
-    for (size_t i = 0; i < p->register_vec.len; ++i)
-        printf("%04zu    %04u\n", (i + 1), p->register_vec.regs[i]);
-
-    printf("=== END REGISTER ===\n\n");
-}
-
 static token advance(parser_state* p) {
     return p->vec->tokens[++(p->pos)];
 }
@@ -290,8 +278,6 @@ ir_arr parse(const token_vec* vec) {
             exit(EXIT_FAILURE);
         }
     }
-
-    //register_dump(&p);
 
     // Return
     free(p.labels);

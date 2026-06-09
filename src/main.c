@@ -90,11 +90,10 @@ int main(const int argc, const char *argv[]) {
 
     run_vm(&ir, &a);
     ir_arr_free(&ir);
+    printf("\n\r");
 
     if (a.flags & VERBOSE)
         printf("\n\n=== DONE ===\n");
 
-    printf("\r\n");
-    fflush(stdout);
     return EXIT_SUCCESS;
 }

@@ -43,7 +43,7 @@ static void write_file(const void* ctx, const int32_t value) {
     fputc((int)value, f);
 }
 
-static void write_number(const vm_state* vm, int32_t value) {
+static void write_number(const vm_state* vm, int64_t value) {
     if (value < 0) {
         vm->write(vm->write_ctx, '-');
         value = -value;
@@ -54,7 +54,7 @@ static void write_number(const vm_state* vm, int32_t value) {
         return;
     }
 
-    char buf[20];
+    char buf[32];
     size_t i = 0;
 
     while (value) {
