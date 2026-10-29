@@ -37,6 +37,9 @@ jobs:
             - name: Build
               run: cmake --build build --config Release
 
+            - name: Test
+              run: ctest --test-dir build --build-config Release --output-on-failure
+
             - name: Rename artifact (Unix)
               if: runner.os != 'Windows'
               run: mv build/${{ matrix.artifact_name }} build/${{ matrix.asset_name }}

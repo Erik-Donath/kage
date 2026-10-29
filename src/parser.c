@@ -4,288 +4,421 @@
 
 #include "parser.h"
 
-#include <stdbool.h>
-#include <stdlib.h>
+#include <stdint.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
 typedef struct {
-    const char* label;
-    size_t      target_index;
+    const char* name;
+    size_t target;
 } label_entry;
 
 typedef struct {
-    const char* label;
-    size_t      patch_index;
-} patch_entry;
+    const char* name;
+    size_t instruction;
+    int line;
+    int column;
+} jump_patch;
 
 typedef struct {
-    uint32_t* regs;
-    size_t len;
-    size_t cap;
-} register_patch_vec;
-#define REGISTER_PATCH_VEC_INIT_CAP 256
+    const token_vec* tokens;
+    diagnostic_list* diagnostics;
+    size_t pos;
 
-typedef struct {
-    const token_vec*    vec;
-    size_t              pos;
-    ir_instruction*     ir;
-    size_t              ir_idx;
-    label_entry*        labels;
-    size_t              label_idx;
-    patch_entry*        patches;
-    size_t              patch_idx;
-    register_patch_vec  register_vec;
-} parser_state;
+    ir_instruction* instructions;
+    size_t instruction_count;
+    size_t instruction_capacity;
 
-static void emit_ir(parser_state* p, const ir_instruction inst) {
-    p->ir[p->ir_idx++] = inst;
+    label_entry* labels;
+    size_t label_count;
+    size_t label_capacity;
+
+    jump_patch* patches;
+    size_t patch_count;
+    size_t patch_capacity;
+
+    uint32_t* registers;
+    size_t register_count;
+    size_t register_capacity;
+} parser;
+
+static token current(const parser* p) {
+    return p->tokens->tokens[p->pos];
 }
 
-static void emit_label(parser_state* p, const char* label) {
-    p->labels[p->label_idx++] = (label_entry){
-        .label = label,
-        .target_index = p->ir_idx,
-    };
-}
-
-static void emit_patch(parser_state* p, const char* patch) {
-    p->patches[p->patch_idx++] = (patch_entry){
-        .label = patch,
-        .patch_index = p->ir_idx,
-    };
-}
-
-static uint32_t patch_reg(parser_state* p, const uint32_t reg) {
-    register_patch_vec* vec = &p->register_vec;
-
-    // Do not patch zero register
-    if (reg == 0) {
-        return 0;
+static const char* expected_help(const token_type type) {
+    switch (type) {
+        case NUM:
+            return "Add a number or register address here (for example, 1).";
+        case OP:
+            return "Insert one of: +, -, *, /, %.";
+        case LABEL:
+            return "Define a label with hikari <name> or correct the jump target.";
+        default:
+            return "Check the instruction spelling and operand order.";
     }
-
-    // Do not add a reg twice
-    for (size_t i = 0; i < vec->len; ++i) {
-        if (vec->regs[i] == reg)
-            return (uint32_t)(i + 1);
-    }
-
-    if (vec->len >= vec->cap) {
-        vec->cap *= 2;
-        vec->regs = realloc(vec->regs, vec->cap * sizeof(vec->regs[0]));
-    }
-    vec->regs[vec->len++] = reg;
-    return (uint32_t)vec->len;
 }
 
-static token advance(parser_state* p) {
-    return p->vec->tokens[++(p->pos)];
-}
-
-static token current(parser_state* p) {
-    return p->vec->tokens[p->pos];
-}
-
-static token expect(parser_state* p, const token_type expected) {
-    const token t = advance(p);
-    if (p->pos >= p->vec->len) {
-        fprintf(stderr, "Parse error: unexpected end of input\n");
-        exit(EXIT_FAILURE);
-    }
-
+static bool consume(parser* p, const token_type expected, token* result) {
+    const token t = current(p);
     if (t.type != expected) {
-        fprintf(stderr, "ParseError (%d:%d): expected %s(%d) but got %s(%d)\n",
-            t.line, t.column,
-            token_names[expected], expected,
-            token_names[t.type], t.type
-        );
-        exit(EXIT_FAILURE);
+        if (t.type != INVALID) {
+            char message[192];
+            snprintf(message, sizeof(message), "expected %s(%d) but got %s(%d)",
+                     token_names[expected], expected, token_names[t.type], t.type);
+            diagnostics_add(p->diagnostics, DIAGNOSTIC_PARSER,
+                            t.line, t.column, message, expected_help(expected));
+        }
+        return false;
     }
 
-    return t;
+    *result = t;
+    if (p->pos + 1 < p->tokens->len)
+        p->pos++;
+    return true;
 }
 
-static ir_operation translate_operation(const char ch) {
-    switch (ch) {
-        case '+':
-            return ADDITION;
-        case '-':
-            return SUBTRACTION;
-        case '*':
-            return MULTIPLICATION;
-        case '/':
-            return DIVISION;
-        case '%':
-            return MODULUS;
-        default:
-            break;
+static bool normalize_register(parser* p, const token t, uint32_t* result) {
+    if (t.num < 0) {
+        diagnostics_add(p->diagnostics, DIAGNOSTIC_PARSER,
+                        t.line, t.column, "register address must be non-negative",
+                        "Use register 0 or a positive register address.");
+        return false;
+    }
+    if (t.num == 0) {
+        *result = 0;
+        return true;
+    }
+    if (p->register_count >= UINT32_MAX) {
+        diagnostics_add(p->diagnostics, DIAGNOSTIC_PARSER,
+                        t.line, t.column, "program uses too many registers", NULL);
+        return false;
     }
 
-    fprintf(stderr, "ParseError: unknown operator %c\n", ch);
-    exit(EXIT_FAILURE);
-}
-
-static void parse_num(parser_state *p, const token t) {
-    const uint32_t dest = t.reg;
-    const token kw = advance(p);
-
-    switch (kw.type) {
-        case STORE_LIT: {
-            const token val = expect(p, NUM);
-            emit_ir(p, (ir_instruction){
-                .type = INIT_REGISTER,
-                .init_register.dest = patch_reg(p, dest),
-                .init_register.literal = val.num,
-            });
-        } break;
-        case STORE_CPY: {
-            const token src = expect(p, NUM);
-            emit_ir(p, (ir_instruction){
-                .type = COPY_REGISTER,
-                .copy_register.dest = patch_reg(p, dest),
-                .copy_register.src = patch_reg(p, src.reg),
-            });
-        } break;
-        case STORE_EXP: {
-            const token src1 = expect(p, NUM);
-            const token op   = expect(p, OP);
-            const token src2 = expect(p, NUM);
-
-            emit_ir(p, (ir_instruction){
-                .type = CALC_REGISTER,
-                .calc_register.dest = patch_reg(p, dest),
-                .calc_register.src1 = patch_reg(p, src1.reg),
-                .calc_register.src2 = patch_reg(p, src2.reg),
-                .calc_register.op = translate_operation(op.op),
-            });
-        } break;
-        default:
-            fprintf(stderr, "Parse error(%d:%d): expected store keyword but got %s(%d)\n",
-                kw.line, kw.column,
-                token_names[kw.type], kw.type
-            );
-            exit(EXIT_FAILURE);
-    }
-}
-
-ir_arr parse(const token_vec* vec) {
-    // Pass 1: Pre-Scan
-    size_t inst_count = 0;
-    size_t label_count = 0;
-    size_t patch_count = 0;
-
-    for (size_t i = 0; i < vec->len; ++i) {
-        if (vec->tokens[i].type < 100)
-            inst_count++;
-        if (vec->tokens[i].type == FLOW_LAB)
-            label_count++;
-        if (vec->tokens[i].type == FLOW_JMP ||
-            vec->tokens[i].type == FLOW_COND_JMP)
-            patch_count++;
+    for (size_t i = 0; i < p->register_count; ++i) {
+        if (p->registers[i] == (uint32_t)t.num) {
+            *result = (uint32_t)(i + 1);
+            return true;
+        }
     }
 
-    // Pass 2: Code generation
-    parser_state p = (parser_state){
-        .vec = vec,
-        .pos = 0,
-        .ir = malloc(sizeof(ir_instruction) * inst_count),
-        .ir_idx = 0,
-        .labels = malloc(sizeof(label_entry) * label_count),
-        .label_idx = 0,
-        .patches = malloc(sizeof(patch_entry) * patch_count),
-        .patch_idx = 0,
-        .register_vec.len = 0,
-        .register_vec.cap = REGISTER_PATCH_VEC_INIT_CAP,
-        .register_vec.regs = malloc(sizeof(uint32_t) * REGISTER_PATCH_VEC_INIT_CAP),
-    };
-
-    while (p.pos < p.vec->len) {
-        const token t = current(&p);
-        switch (t.type) {
-            case NUM:
-                parse_num(&p, t);
-                break;
-            case FLOW_LAB: {
-                const token label = expect(&p, LABEL);
-                emit_label(&p, label.str);
-            } break;
-            case FLOW_JMP: {
-                const token label = expect(&p, LABEL);
-
-                emit_patch(&p, label.str);
-                emit_ir(&p, (ir_instruction){
-                    .type = JMP,
-                    .jmp.target = 0,
-                });
-            } break;
-            case FLOW_COND_JMP: {
-                const token label = expect(&p, LABEL);
-                const token cond  = expect(&p, NUM);
-
-                emit_patch(&p, label.str);
-                emit_ir(&p, (ir_instruction){
-                    .type = COND_JMP,
-                    .jmp.target = 0,
-                    .jmp.cond = patch_reg(&p, cond.reg),
-                });
-            } break;
-            case IO_READ: {
-                const token dst = expect(&p, NUM);
-                emit_ir(&p, (ir_instruction){
-                    .type = IO_IN,
-                    .io_in.dest = patch_reg(&p, dst.reg),
-                });
-            } break;
-            case IO_PRINT: {
-                const token src = expect(&p, NUM);
-                emit_ir(&p, (ir_instruction){
-                    .type = IO_OUT,
-                    .io_out.src = patch_reg(&p, src.reg),
-                });
-            } break;
-            case IO_DEC_PRINT: {
-                const token src = expect(&p, NUM);
-                emit_ir(&p, (ir_instruction){
-                    .type = IO_DOUT,
-                    .io_out.src = patch_reg(&p, src.reg),
-                });
-            } break;
-            case EOF_TOKEN:
-                break;
-            default:
-                fprintf(stderr, "Parse error: unexpected token type %d\n", t.type);
-                exit(EXIT_FAILURE);
+    if (p->register_count == p->register_capacity) {
+        const size_t new_capacity = p->register_capacity == 0
+            ? 16
+            : p->register_capacity * 2;
+        if (new_capacity < p->register_capacity ||
+            new_capacity > SIZE_MAX / sizeof(*p->registers)) {
+            diagnostics_add(p->diagnostics, DIAGNOSTIC_PARSER,
+                            t.line, t.column, "program uses too many registers", NULL);
+            return false;
         }
 
-        advance(&p);
+        uint32_t* registers = realloc(p->registers,
+                                      new_capacity * sizeof(*p->registers));
+        if (!registers) {
+            p->diagnostics->allocation_failed = true;
+            return false;
+        }
+        p->registers = registers;
+        p->register_capacity = new_capacity;
     }
 
-    // Pass 3: Backpatching
-    for (size_t pi = 0; pi < patch_count; ++pi) {
+    p->registers[p->register_count] = (uint32_t)t.num;
+    *result = (uint32_t)++p->register_count;
+    return true;
+}
+
+static bool parse_register(parser* p, uint32_t* result) {
+    token t;
+    return consume(p, NUM, &t) && normalize_register(p, t, result);
+}
+
+static bool is_instruction_start(const token_type type) {
+    return type == NUM || type == FLOW_LAB || type == FLOW_JMP ||
+           type == FLOW_COND_JMP || type == IO_PRINT || type == IO_READ ||
+           type == IO_DEC_PRINT;
+}
+
+static void synchronize(parser* p, const size_t start) {
+    if (p->pos == start && current(p).type != EOF_TOKEN)
+        p->pos++;
+
+    while (current(p).type != EOF_TOKEN &&
+           !is_instruction_start(current(p).type))
+        p->pos++;
+}
+
+static bool append_instruction(parser* p, const ir_instruction instruction) {
+    if (p->instruction_count >= p->instruction_capacity) {
+        p->diagnostics->allocation_failed = true;
+        return false;
+    }
+    p->instructions[p->instruction_count++] = instruction;
+    return true;
+}
+
+static bool parse_numeric_instruction(parser* p, const token leading) {
+    token keyword;
+    if (p->pos + 1 >= p->tokens->len) {
+        diagnostics_add(p->diagnostics, DIAGNOSTIC_PARSER,
+                        leading.line, leading.column, "expected store keyword",
+                        "Follow a register address with yami, Yami, or YAMI.");
+        return false;
+    }
+    p->pos++;
+    keyword = current(p);
+    if (keyword.type != STORE_LIT && keyword.type != STORE_CPY &&
+        keyword.type != STORE_EXP) {
+        if (keyword.type != INVALID)
+            diagnostics_add(p->diagnostics, DIAGNOSTIC_PARSER,
+                            keyword.line, keyword.column, "expected store keyword",
+                            "Follow a register address with yami, Yami, or YAMI.");
+        return false;
+    }
+    p->pos++;
+
+    uint32_t dest;
+    if (leading.num < 0) {
+        diagnostics_add(p->diagnostics, DIAGNOSTIC_PARSER,
+                        leading.line, leading.column,
+                        "register address must be non-negative",
+                        "Use register 0 or a positive register address.");
+        return false;
+    }
+    if (!normalize_register(p, leading, &dest))
+        return false;
+    if (keyword.type == STORE_LIT) {
+        token literal;
+        if (!consume(p, NUM, &literal))
+            return false;
+        return append_instruction(p, (ir_instruction){
+            .type = INIT_REGISTER,
+            .init_register = { .dest = dest, .literal = literal.num },
+        });
+    }
+
+    uint32_t src1;
+    if (!parse_register(p, &src1))
+        return false;
+
+    if (keyword.type == STORE_CPY) {
+        return append_instruction(p, (ir_instruction){
+            .type = COPY_REGISTER,
+            .copy_register = { .src = src1, .dest = dest },
+        });
+    }
+
+    token op;
+    if (!consume(p, OP, &op))
+        return false;
+    uint32_t src2;
+    if (!parse_register(p, &src2))
+        return false;
+
+    ir_operation operation;
+    switch (op.op) {
+        case '+': operation = ADDITION; break;
+        case '-': operation = SUBTRACTION; break;
+        case '*': operation = MULTIPLICATION; break;
+        case '/': operation = DIVISION; break;
+        case '%': operation = MODULUS; break;
+        default:
+            diagnostics_add(p->diagnostics, DIAGNOSTIC_PARSER,
+                            op.line, op.column, "unknown operator",
+                            "Use one of: +, -, *, /, %.");
+            return false;
+    }
+
+    return append_instruction(p, (ir_instruction){
+        .type = CALC_REGISTER,
+        .calc_register = {
+            .src1 = src1, .src2 = src2, .dest = dest, .op = operation,
+        },
+    });
+}
+
+static bool add_label(parser* p, const token name) {
+    for (size_t i = 0; i < p->label_count; ++i) {
+        if (strcmp(p->labels[i].name, name.str) == 0) {
+            char message[192];
+            snprintf(message, sizeof(message), "duplicate label %s", name.str);
+            diagnostics_add(p->diagnostics, DIAGNOSTIC_LABEL,
+                            name.line, name.column, message,
+                            "Rename this label or remove the earlier definition.");
+            return false;
+        }
+    }
+    if (p->label_count >= p->label_capacity) {
+        p->diagnostics->allocation_failed = true;
+        return false;
+    }
+    p->labels[p->label_count++] = (label_entry){
+        .name = name.str,
+        .target = p->instruction_count,
+    };
+    return true;
+}
+
+static bool add_patch(parser* p, const token name) {
+    if (p->patch_count >= p->patch_capacity) {
+        p->diagnostics->allocation_failed = true;
+        return false;
+    }
+    p->patches[p->patch_count++] = (jump_patch){
+        .name = name.str,
+        .instruction = p->instruction_count,
+        .line = name.line,
+        .column = name.column,
+    };
+    return true;
+}
+
+static bool parse_statement(parser* p) {
+    const token first = current(p);
+    if (first.type == NUM)
+        return parse_numeric_instruction(p, first);
+
+    if (first.type == FLOW_LAB) {
+        p->pos++;
+        token name;
+        if (!consume(p, LABEL, &name))
+            return false;
+        add_label(p, name);
+        return true;
+    }
+
+    if (first.type == FLOW_JMP || first.type == FLOW_COND_JMP) {
+        p->pos++;
+        token name;
+        if (!consume(p, LABEL, &name))
+            return false;
+
+        uint32_t condition = 0;
+        if (first.type == FLOW_COND_JMP && !parse_register(p, &condition))
+            return false;
+
+        if (!add_patch(p, name))
+            return false;
+        return append_instruction(p, (ir_instruction){
+            .type = first.type == FLOW_JMP ? JMP : COND_JMP,
+            .jmp = { .target = 0, .cond = condition },
+        });
+    }
+
+    if (first.type == IO_READ || first.type == IO_PRINT ||
+        first.type == IO_DEC_PRINT) {
+        p->pos++;
+        uint32_t reg;
+        if (!parse_register(p, &reg))
+            return false;
+
+        if (first.type == IO_READ)
+            return append_instruction(p, (ir_instruction){
+                .type = IO_IN, .io_in = { .dest = reg },
+            });
+        return append_instruction(p, (ir_instruction){
+            .type = first.type == IO_PRINT ? IO_OUT : IO_DOUT,
+            .io_out = { .src = reg },
+        });
+    }
+
+    diagnostics_add(p->diagnostics, DIAGNOSTIC_PARSER,
+                    first.line, first.column, "unexpected token",
+                    "Start an instruction with a register address or Kage keyword.");
+    return false;
+}
+
+static void resolve_jumps(parser* p) {
+    for (size_t i = 0; i < p->patch_count; ++i) {
+        const jump_patch patch = p->patches[i];
         bool found = false;
-        const patch_entry patch = p.patches[pi];
-        for (size_t li = 0; li < label_count; ++li) {
-            const label_entry label = p.labels[li];
-            if (strcmp(patch.label, label.label) == 0) {
-                p.ir[patch.patch_index].jmp.target = label.target_index;
+        for (size_t j = 0; j < p->label_count; ++j) {
+            if (strcmp(patch.name, p->labels[j].name) == 0) {
+                p->instructions[patch.instruction].jmp.target = p->labels[j].target;
                 found = true;
                 break;
             }
         }
-
         if (!found) {
-            fprintf(stderr, "LabelError: undefined label %s\n", patch.label);
-            exit(EXIT_FAILURE);
+            char message[192];
+            snprintf(message, sizeof(message), "undefined label %s", patch.name);
+            diagnostics_add(p->diagnostics, DIAGNOSTIC_LABEL,
+                            patch.line, patch.column, message,
+                            "Define this label with hikari before jumping to it.");
         }
     }
+}
 
-    // Return
+static void* allocate_array(const size_t count, const size_t element_size) {
+    if (count == 0)
+        return NULL;
+    if (count > SIZE_MAX / element_size)
+        return NULL;
+    return calloc(count, element_size);
+}
+
+bool parse(const token_vec* vec, diagnostic_list* diagnostics, ir_arr* result) {
+    *result = (ir_arr){0};
+    if (!vec || vec->len == 0 || !vec->tokens) {
+        diagnostics_add(diagnostics, DIAGNOSTIC_PARSER, 1, 1,
+                        "token stream is empty", NULL);
+        return false;
+    }
+
+    size_t instruction_capacity = 0;
+    size_t label_capacity = 0;
+    size_t patch_capacity = 0;
+    for (size_t i = 0; i < vec->len; ++i) {
+        const token_type type = vec->tokens[i].type;
+        if (type == NUM || type == FLOW_JMP || type == FLOW_COND_JMP ||
+            type == IO_PRINT || type == IO_READ || type == IO_DEC_PRINT)
+            instruction_capacity++;
+        if (type == FLOW_LAB)
+            label_capacity++;
+        if (type == FLOW_JMP || type == FLOW_COND_JMP)
+            patch_capacity++;
+    }
+
+    parser p = {
+        .tokens = vec,
+        .diagnostics = diagnostics,
+        .instruction_capacity = instruction_capacity,
+        .label_capacity = label_capacity,
+        .patch_capacity = patch_capacity,
+    };
+    p.instructions = allocate_array(instruction_capacity, sizeof(*p.instructions));
+    p.labels = allocate_array(label_capacity, sizeof(*p.labels));
+    p.patches = allocate_array(patch_capacity, sizeof(*p.patches));
+    if ((instruction_capacity && !p.instructions) ||
+        (label_capacity && !p.labels) || (patch_capacity && !p.patches)) {
+        diagnostics->allocation_failed = true;
+        goto cleanup;
+    }
+
+    while (current(&p).type != EOF_TOKEN && !diagnostics->allocation_failed) {
+        const size_t start = p.pos;
+        if (current(&p).type == INVALID) {
+            p.pos++;
+            synchronize(&p, start);
+            continue;
+        }
+        if (!parse_statement(&p))
+            synchronize(&p, start);
+    }
+
+    resolve_jumps(&p);
+    if (diagnostics->len == 0 && !diagnostics->allocation_failed) {
+        result->instruction = p.instructions;
+        result->length = p.instruction_count;
+        result->register_count = p.register_count;
+        p.instructions = NULL;
+    }
+
+cleanup:
+    free(p.instructions);
     free(p.labels);
     free(p.patches);
-    free(p.register_vec.regs);
-    return (ir_arr){
-        .instruction = p.ir,
-        .length = inst_count,
-        .register_count = p.register_vec.len,
-    };
+    free(p.registers);
+    return result->instruction != NULL || (diagnostics->len == 0 && !diagnostics->allocation_failed);
 }

@@ -3,176 +3,283 @@
 //
 
 #include "vm.h"
-#include <stdlib.h>
-#include <stdio.h>
 
-typedef int32_t (*read_fn)(const void* ctx);
-typedef void (*write_fn)(const void* ctx, int32_t value);
+#include <errno.h>
+#include <stdbool.h>
+#include <stdint.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+
+typedef bool (*read_fn)(void* ctx, int32_t* value);
+typedef bool (*write_fn)(void* ctx, int32_t value);
 
 typedef struct {
     const ir_arr* ir;
-    size_t        pos;
-    size_t        steps;
-    int32_t*      regs;
+    size_t pos;
+    size_t steps;
+    int32_t* regs;
 
-    read_fn       read;
-    void*         read_ctx;
-    write_fn      write;
-    void*         write_ctx;
+    read_fn read;
+    void* read_ctx;
+    write_fn write;
+    void* write_ctx;
 } vm_state;
 
-static int32_t read_stdin(const void* ctx) {
+static bool read_stdin(void* ctx, int32_t* value) {
     (void)ctx;
     const int c = getchar();
-    return c == EOF ? 0 : (int32_t)c;
+    if (c == EOF) {
+        if (ferror(stdin))
+            return false;
+        *value = 0;
+        return true;
+    }
+
+    *value = (unsigned char)c;
+    return true;
 }
 
-static void write_stdout(const void* ctx, const int32_t value) {
+static bool write_stdout(void* ctx, const int32_t value) {
     (void)ctx;
-    putchar(value);
+    return putchar((unsigned char)value) != EOF;
 }
 
-static int32_t read_file(const void* ctx) {
-    FILE* f = (FILE*)ctx;
-    const int c = fgetc(f);
-    return c == EOF ? 0 : (int32_t)c;
+static bool read_file(void* ctx, int32_t* value) {
+    FILE* file = ctx;
+    const int c = fgetc(file);
+    if (c == EOF) {
+        if (ferror(file))
+            return false;
+        *value = 0;
+        return true;
+    }
+
+    *value = (unsigned char)c;
+    return true;
 }
 
-static void write_file(const void* ctx, const int32_t value) {
-    FILE* f = (FILE*)ctx;
-    fputc((int)value, f);
+static bool write_file(void* ctx, const int32_t value) {
+    FILE* file = ctx;
+    return fputc((unsigned char)value, file) != EOF;
 }
 
-static void write_number(const vm_state* vm, int64_t value) {
+static bool write_number(const vm_state* vm, int32_t value) {
+    int64_t magnitude = value;
     if (value < 0) {
-        vm->write(vm->write_ctx, '-');
-        value = -value;
+        if (!vm->write(vm->write_ctx, '-'))
+            return false;
+        magnitude = -magnitude;
     }
 
-    if (value == 0) {
-        vm->write(vm->write_ctx, '0');
-        return;
-    }
+    if (magnitude == 0)
+        return vm->write(vm->write_ctx, '0');
 
-    char buf[32];
+    char buf[10];
     size_t i = 0;
-
-    while (value) {
-        buf[i++] = (char)('0' + value % 10);
-        value /= 10;
+    while (magnitude > 0) {
+        buf[i++] = (char)('0' + magnitude % 10);
+        magnitude /= 10;
     }
 
-    while (i-- > 0)
-        vm->write(vm->write_ctx, buf[i]);
+    while (i > 0) {
+        if (!vm->write(vm->write_ctx, buf[--i]))
+            return false;
+    }
+    return true;
 }
 
-static int32_t set(const vm_state* state, const size_t reg, const int32_t value) {
-    if (reg == 0) return 0;
-    return state->regs[reg - 1] = value;
+static void set_register(const vm_state* state, const size_t reg, const int32_t value) {
+    if (reg != 0)
+        state->regs[reg - 1] = value;
 }
 
-static int32_t get(const vm_state* state, const size_t reg) {
-    if (reg == 0) return 0;
-    return state->regs[reg - 1];
+static int32_t get_register(const vm_state* state, const size_t reg) {
+    return reg == 0 ? 0 : state->regs[reg - 1];
 }
 
-static int32_t calc(const int32_t a, const int32_t b, const ir_operation op) {
+static int32_t wrap_signed(uint32_t bits) {
+    if (bits <= INT32_MAX)
+        return (int32_t)bits;
+    return (int32_t)((int64_t)bits - INT64_C(4294967296));
+}
+
+static bool calculate(const int32_t a, const int32_t b, const ir_operation op,
+                      int32_t* result) {
     switch (op) {
-        case ADDITION:          return a + b;
-        case SUBTRACTION:       return a - b;
-        case MULTIPLICATION:    return a * b;
-        case DIVISION:          return b == 0 ? 0 : a / b;
-        case MODULUS:           return b == 0 ? 0 : a % b;
+        case ADDITION:
+            *result = wrap_signed((uint32_t)a + (uint32_t)b);
+            return true;
+        case SUBTRACTION:
+            *result = wrap_signed((uint32_t)a - (uint32_t)b);
+            return true;
+        case MULTIPLICATION:
+            *result = wrap_signed((uint32_t)a * (uint32_t)b);
+            return true;
+        case DIVISION:
+            *result = b == 0 ? 0 : (a == INT32_MIN && b == -1 ? INT32_MIN : a / b);
+            return true;
+        case MODULUS:
+            *result = b == 0 || (a == INT32_MIN && b == -1) ? 0 : a % b;
+            return true;
     }
 
-    fprintf(stderr, "unknown operator %d\n", op);
-    exit(EXIT_FAILURE);
+    return false;
 }
 
-static void exec(vm_state* vm) {
-    vm->steps++;
-
-    const ir_instruction inst = vm->ir->instruction[vm->pos];
+static bool execute(vm_state* vm, const ir_instruction inst) {
     switch (inst.type) {
-        case INIT_REGISTER: {
-            const int32_t value = inst.init_register.literal;
-            set(vm, inst.init_register.dest, value);
-        } break;
-        case COPY_REGISTER: {
-            const int32_t value = get(vm, inst.copy_register.src);
-            set(vm, inst.copy_register.dest, value);
-        } break;
+        case INIT_REGISTER:
+            set_register(vm, inst.init_register.dest, inst.init_register.literal);
+            break;
+        case COPY_REGISTER:
+            set_register(vm, inst.copy_register.dest,
+                         get_register(vm, inst.copy_register.src));
+            break;
         case CALC_REGISTER: {
-            const int32_t value1 = get(vm, inst.calc_register.src1);
-            const int32_t value2 = get(vm, inst.calc_register.src2);
-            set(vm, inst.calc_register.dest, calc(value1, value2, inst.calc_register.op));
+            int32_t result;
+            if (!calculate(get_register(vm, inst.calc_register.src1),
+                           get_register(vm, inst.calc_register.src2),
+                           inst.calc_register.op, &result)) {
+                fprintf(stderr, "RuntimeError: invalid arithmetic operation\n");
+                return false;
+            }
+            set_register(vm, inst.calc_register.dest, result);
         } break;
-        case JMP: {
+        case JMP:
             vm->pos = inst.jmp.target;
-            return;
-        }
-        case COND_JMP: {
-            if (get(vm, inst.jmp.cond) != 0) {
+            return true;
+        case COND_JMP:
+            if (get_register(vm, inst.jmp.cond) != 0) {
                 vm->pos = inst.jmp.target;
-                return;
+                return true;
             }
-        } break;
+            break;
         case IO_OUT: {
-            const int32_t c = get(vm, inst.io_out.src);
-            if (c == 0) {
+            const int32_t value = get_register(vm, inst.io_out.src);
+            if (value == 0) {
                 vm->pos = vm->ir->length;
-                return;
+                return true;
             }
-            vm->write(vm->write_ctx, c);
+            if (!vm->write(vm->write_ctx, value)) {
+                fprintf(stderr, "RuntimeError: output write failed\n");
+                return false;
+            }
         } break;
-        case IO_DOUT: {
-            const int32_t val = get(vm, inst.io_out.src);
-            write_number(vm, val);
-        } break;
+        case IO_DOUT:
+            if (!write_number(vm, get_register(vm, inst.io_out.src))) {
+                fprintf(stderr, "RuntimeError: output write failed\n");
+                return false;
+            }
+            break;
         case IO_IN: {
-            const int32_t c = vm->read(vm->read_ctx);
-            set(vm, inst.io_in.dest, c);
+            int32_t value;
+            if (!vm->read(vm->read_ctx, &value)) {
+                fprintf(stderr, "RuntimeError: input read failed\n");
+                return false;
+            }
+            set_register(vm, inst.io_in.dest, value);
         } break;
+        default:
+            fprintf(stderr, "RuntimeError: invalid instruction\n");
+            return false;
     }
 
     vm->pos++;
+    return true;
 }
 
-void run_vm(const ir_arr* ir, const args* a) {
+int run_vm(const ir_arr* ir, const args* a) {
+    bool success = true;
     FILE* input_file = NULL;
     FILE* output_file = NULL;
+    int32_t* regs = NULL;
 
     if (a->flags & INPUT) {
         input_file = fopen(a->input, "rb");
         if (!input_file) {
-            fprintf(stderr, "Error: cannot open input file %s\n", a->input);
-            return;
+            fprintf(stderr, "Error: cannot open input file %s: %s\n",
+                    a->input, strerror(errno));
+            success = false;
+            goto cleanup;
         }
+    }
+
+    if ((a->flags & INPUT) && (a->flags & OUTPUT) &&
+        strcmp(a->input, a->output) == 0) {
+        fprintf(stderr, "Error: input and output paths must be different\n");
+        success = false;
+        goto cleanup;
     }
 
     if (a->flags & OUTPUT) {
         output_file = fopen(a->output, "wb");
         if (!output_file) {
-            fprintf(stderr, "Error: cannot open output file %s\n", a->output);
-            return;
+            fprintf(stderr, "Error: cannot open output file %s: %s\n",
+                    a->output, strerror(errno));
+            success = false;
+            goto cleanup;
         }
     }
 
-    vm_state vm = (vm_state) {
+    if (ir->register_count > SIZE_MAX / sizeof(*regs)) {
+        fprintf(stderr, "RuntimeError: program uses too many registers\n");
+        success = false;
+        goto cleanup;
+    }
+
+    regs = calloc(ir->register_count == 0 ? 1 : ir->register_count, sizeof(*regs));
+    if (!regs) {
+        fprintf(stderr, "RuntimeError: out of memory\n");
+        success = false;
+        goto cleanup;
+    }
+
+    vm_state vm = {
         .ir = ir,
         .pos = 0,
         .steps = 0,
-        .regs = calloc(ir->register_count, sizeof(int32_t)),
-        .read = a->flags & INPUT ? read_file : read_stdin,
-        .read_ctx = (void*)input_file,
-        .write = a->flags & OUTPUT ? write_file : write_stdout,
-        .write_ctx = (void*)output_file,
+        .regs = regs,
+        .read = input_file ? read_file : read_stdin,
+        .read_ctx = input_file,
+        .write = output_file ? write_file : write_stdout,
+        .write_ctx = output_file,
     };
 
-    while (vm.pos < vm.ir->length && !(a->flags & MAX_STEPS && vm.steps >= a->max_steps))
-        exec(&vm);
+    while (vm.pos < vm.ir->length) {
+        if (a->max_steps != 0 && vm.steps >= a->max_steps) {
+            fprintf(stderr, "RuntimeError: maximum instruction count (%zu) reached\n",
+                    a->max_steps);
+            success = false;
+            break;
+        }
 
-    free(vm.regs);
-    if (input_file) fclose(input_file);
-    if (output_file) fclose(output_file);
+        const ir_instruction inst = vm.ir->instruction[vm.pos];
+        vm.steps++;
+        if (!execute(&vm, inst)) {
+            success = false;
+            break;
+        }
+    }
+
+    if (output_file) {
+        if (fclose(output_file) != 0) {
+            fprintf(stderr, "RuntimeError: failed to close output file %s\n", a->output);
+            success = false;
+        }
+        output_file = NULL;
+    } else if (fflush(stdout) == EOF) {
+        fprintf(stderr, "RuntimeError: failed to flush standard output\n");
+        success = false;
+    }
+
+cleanup:
+    free(regs);
+    if (input_file && fclose(input_file) != 0) {
+        fprintf(stderr, "RuntimeError: failed to close input file %s\n", a->input);
+        success = false;
+    }
+    if (output_file)
+        fclose(output_file);
+    return success ? EXIT_SUCCESS : EXIT_FAILURE;
 }

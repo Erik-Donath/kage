@@ -14,22 +14,23 @@ project(
 
 set(CMAKE_C_STANDARD 17)
 set(CMAKE_C_STANDARD_REQUIRED ON)
-set(CMAKE_C_EXTENSIONS ON)
+set(CMAKE_C_EXTENSIONS OFF)
 
 configure_file(
         "${PROJECT_SOURCE_DIR}/include/version.h.in"
         "${PROJECT_BINARY_DIR}/include/version.h"
 )
 
-file(
-        GLOB_RECURSE KAGE_SOURCES
-        CONFIGURE_DEPENDS
-        "${PROJECT_SOURCE_DIR}/src/*.c"
-)
-
 add_executable(
         ${PROJECT_NAME}
-        ${KAGE_SOURCES}
+        src/args.c
+        src/diagnostics.c
+        src/ir.c
+        src/lexer.c
+        src/main.c
+        src/parser.c
+        src/tokens.c
+        src/vm.c
 )
 
 target_include_directories(
@@ -49,10 +50,13 @@ if(CMAKE_C_COMPILER_ID MATCHES "GNU|Clang")
         -Wshadow
         -Wconversion
         -Wsign-conversion
+        -Werror
     )
+elseif(MSVC)
+    target_compile_options(${PROJECT_NAME} PRIVATE /W4)
 endif()
 
-enable_testing()
+include(CTest)
 
 function(add_kage_test name)
     set(kage_file       "${PROJECT_SOURCE_DIR}/tests/${name}.kage")
@@ -60,48 +64,112 @@ function(add_kage_test name)
     set(expected_file   "${PROJECT_SOURCE_DIR}/tests/${name}.output")
 
     if(NOT EXISTS "${kage_file}")
-        message(WARNING "add_kage_test: ${kage_file} not found, skipping '${name}'")
-        return()
+        message(FATAL_ERROR "add_kage_test: ${kage_file} not found")
     endif()
 
-    # Pass empty string if no input file exists
     if(NOT EXISTS "${input_file}")
         set(input_file "")
     endif()
-    # Pass empty string if no expected file exists
     if(NOT EXISTS "${expected_file}")
-        set(expected_file "")
+        message(FATAL_ERROR "add_kage_test: ${expected_file} not found")
     endif()
 
     add_test(
             NAME ${name}
             COMMAND ${CMAKE_COMMAND}
-            -DKAGE=$<TARGET_FILE:kage>
-            -DFILE=${kage_file}
-            -DEXPECTED=${expected_file}
-            -DINPUT=${input_file}
+            "-DKAGE=$<TARGET_FILE:${PROJECT_NAME}>"
+            "-DFILE=${kage_file}"
+            "-DEXPECTED=${expected_file}"
+            "-DINPUT=${input_file}"
+            "-DACTUAL=${CMAKE_CURRENT_BINARY_DIR}/${name}.actual"
             -P "${PROJECT_SOURCE_DIR}/tests/run_test.cmake"
     )
 endfunction()
 
-# Existing tests
-add_kage_test(hi)
-add_kage_test(echo_char)
-add_kage_test(store_lit)       # yami  - store literal
-add_kage_test(copy_register)   # Yami  - copy register
-add_kage_test(arith_add)       # YAMI + - addition
-add_kage_test(arith_sub)       # YAMI - - subtraction
-add_kage_test(arith_mul)       # YAMI * - multiplication
-add_kage_test(arith_div)       # YAMI / - division
-add_kage_test(arith_mod)       # YAMI % - modulo
-add_kage_test(div_zero)        # division and modulo by zero produce 0
-add_kage_test(jmp)             # Hikari - unconditional jump
-add_kage_test(cond_jmp_taken)  # HIKARI - conditional jump taken (nonzero)
-add_kage_test(cond_jmp_skip)   # HIKARI - conditional jump not taken (zero)
-add_kage_test(loop)            # hikari + HIKARI - loop with countdown
-add_kage_test(dec_print)       # REI - decimal print
-add_kage_test(char_input)      # Rei - character read
-add_kage_test(zero_reg)        # r0 reads as 0, writes are ignored
+if(BUILD_TESTING)
+    foreach(test_case IN ITEMS
+            hi
+            echo_char
+            store_lit
+            copy_register
+            copy_zero_reg
+            arith_add
+            arith_sub
+            arith_mul
+            arith_div
+            arith_mod
+            div_zero
+            jmp
+            cond_jmp_taken
+            cond_jmp_skip
+            loop
+            dec_print
+            char_input
+            zero_reg
+            overflow_add
+            overflow_sub
+            overflow_mul
+            overflow_div
+            overflow_mod
+            min_integer
+            max_integer
+    )
+        add_kage_test(${test_case})
+    endforeach()
+
+    function(add_kage_error_test name expected_error)
+        add_test(
+                NAME ${name}
+                COMMAND ${CMAKE_COMMAND}
+                "-DKAGE=$<TARGET_FILE:${PROJECT_NAME}>"
+                "-DFILE=${PROJECT_SOURCE_DIR}/tests/errors/${name}.kage"
+                "-DEXPECTED_ERROR=${expected_error}"
+                -P "${PROJECT_SOURCE_DIR}/tests/run_error_test.cmake"
+        )
+    endfunction()
+
+    add_kage_error_test(integer_overflow "outside the int32 range")
+    add_kage_error_test(unexpected_character "Unexpected character")
+    add_kage_error_test(word_too_long "maximum length of 31 characters")
+    add_kage_error_test(missing_operand "expected NUM")
+    add_kage_error_test(negative_register "register address must be non-negative")
+    add_kage_error_test(duplicate_label "duplicate label")
+    add_kage_error_test(undefined_label "undefined label")
+    add_test(
+            NAME multiple_compiler_errors
+            COMMAND ${CMAKE_COMMAND}
+            "-DKAGE=$<TARGET_FILE:${PROJECT_NAME}>"
+            "-DFILE=${PROJECT_SOURCE_DIR}/tests/errors/multiple_errors.kage"
+            -P "${PROJECT_SOURCE_DIR}/tests/run_diagnostics_test.cmake"
+    )
+    add_test(
+            NAME instruction_limit
+            COMMAND ${CMAKE_COMMAND}
+            "-DKAGE=$<TARGET_FILE:${PROJECT_NAME}>"
+            "-DFILE=${PROJECT_SOURCE_DIR}/tests/errors/instruction_limit.kage"
+            "-DEXPECTED_ERROR=maximum instruction count"
+            -P "${PROJECT_SOURCE_DIR}/tests/run_instruction_limit_test.cmake"
+    )
+    foreach(io_mode IN ITEMS input output)
+        add_test(
+                NAME ${io_mode}_file_error
+                COMMAND ${CMAKE_COMMAND}
+                "-DKAGE=$<TARGET_FILE:${PROJECT_NAME}>"
+                "-DFILE=${PROJECT_SOURCE_DIR}/tests/errors/io_failure.kage"
+                "-DIO_MODE=${io_mode}"
+                "-DIO_PATH=${CMAKE_CURRENT_BINARY_DIR}/missing-${io_mode}-directory/output"
+                -P "${PROJECT_SOURCE_DIR}/tests/run_io_error_test.cmake"
+        )
+    endforeach()
+    add_test(
+            NAME stdout_output
+            COMMAND ${CMAKE_COMMAND}
+            "-DKAGE=$<TARGET_FILE:${PROJECT_NAME}>"
+            -P "${PROJECT_SOURCE_DIR}/tests/run_stdout_test.cmake"
+    )
+endif()
+
+install(TARGETS ${PROJECT_NAME} RUNTIME DESTINATION bin)
 
 message(STATUS "Project      : ${PROJECT_NAME}")
 message(STATUS "Version      : ${PROJECT_VERSION}")

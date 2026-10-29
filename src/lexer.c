@@ -3,19 +3,20 @@
 //
 
 #include "lexer.h"
-#include <ctype.h>
-#include <stdio.h>
+#include <stdbool.h>
+#include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
 
 typedef struct {
-    const char *start;
     const char *current;
 
     int line;
     int column;
 
     token_vec tokens;
+    diagnostic_list* diagnostics;
+    bool failed;
 } lexer_state;
 
 #define CURRENT(l) (*(l)->current)
@@ -23,7 +24,25 @@ typedef struct {
 #define AT_END(l) (CURRENT(l) == '\0')
 
 #define CONSUME(l) lexer_consume(l)
-#define PUSH_TOKEN(l, t) token_vec_push(&(l)->tokens, (t));
+
+static bool is_ascii_alpha(const char c) {
+    return (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z');
+}
+
+static bool is_ascii_digit(const char c) {
+    return c >= '0' && c <= '9';
+}
+
+static bool is_space(const char c) {
+    return c == ' ' || c == '\t' || c == '\n' || c == '\r' || c == '\v' || c == '\f';
+}
+
+static void push_token(lexer_state *l, const token t) {
+    if (!token_vec_push(&l->tokens, t)) {
+        l->failed = true;
+        l->diagnostics->allocation_failed = true;
+    }
+}
 
 static const struct {
     token_type type;
@@ -54,14 +73,11 @@ static void lexer_consume(lexer_state *l) {
     l->current++;
 }
 
-static void lexer_error(const lexer_state *l, const char *msg) {
-    fprintf(stderr,
-            "LexerError (%d:%d): %s\n",
-            l->line,
-            l->column,
-            msg);
-
-    exit(EXIT_FAILURE);
+static void lexer_error(lexer_state* l, const int line, const int column,
+                        const char* message, const char* help) {
+    if (!diagnostics_add(l->diagnostics, DIAGNOSTIC_LEXER,
+                         line, column, message, help))
+        l->failed = true;
 }
 
 #define MAX_SCAN_WORD_LEN 32
@@ -71,15 +87,27 @@ static void scan_word(lexer_state *l) {
     char word[MAX_SCAN_WORD_LEN];
     size_t len = 0;
 
-    while (isalpha(CURRENT(l))) {
-        if (len >= MAX_SCAN_WORD_LEN - 1)
-            lexer_error(l, "Keyword to long");
-
-        word[len++] = CURRENT(l);
+    bool too_long = false;
+    while (is_ascii_alpha(CURRENT(l))) {
+        if (len < MAX_SCAN_WORD_LEN - 1)
+            word[len++] = CURRENT(l);
+        else
+            too_long = true;
         CONSUME(l);
     }
 
     word[len] = '\0';
+    if (too_long) {
+        lexer_error(l, start_line, start_col,
+                    "word exceeds maximum length of 31 characters",
+                    "Shorten this label to 31 ASCII letters or fewer.");
+        push_token(l, (token){
+            .type = INVALID,
+            .line = start_line,
+            .column = start_col,
+        });
+        return;
+    }
     for (size_t i = 0; i < KEYWORD_COUNT; ++i) {
         if (strcmp(word, keywords[i].keyword) == 0) {
             const token t = (token){
@@ -87,56 +115,75 @@ static void scan_word(lexer_state *l) {
                 .line = start_line,
                 .column = start_col,
             };
-            PUSH_TOKEN(l, t);
+            push_token(l, t);
             return;
         }
     }
 
-    // LABLE
     char *copy = malloc(len + 1);
-    if (!copy)
-        lexer_error(l, "out of memory");
+    if (!copy) {
+        l->failed = true;
+        l->diagnostics->allocation_failed = true;
+        return;
+    }
     memcpy(copy, word, len + 1);
 
     const token t = (token){
         .type = LABEL,
         .str = copy,
-        .line = l->line,
-        .column = start_col,
-    };
-    PUSH_TOKEN(l, t);
-}
-
-#define MAX_SCAN_NUMBER_LEN 64
-static void scan_number(lexer_state *l) {
-    const int start_line = l->line;
-    const int start_col = l->column;
-
-    char number[MAX_SCAN_NUMBER_LEN];
-    size_t len = 0;
-
-    if (CURRENT(l) == '-') {
-        number[len++] = '-';
-        CONSUME(l);
-    }
-
-    while (isdigit(CURRENT(l))) {
-        if (len >= MAX_SCAN_NUMBER_LEN - 1)
-            lexer_error(l, "Number too large");
-
-        number[len++] = CURRENT(l);
-        CONSUME(l);
-    }
-
-    number[len] = '\0';
-
-    const token t = (token){
-        .type = NUM,
-        .num= (int32_t)strtol(number,NULL,10),
         .line = start_line,
         .column = start_col,
     };
-    PUSH_TOKEN(l, t);
+    push_token(l, t);
+}
+
+static void scan_number(lexer_state *l) {
+    const int start_line = l->line;
+    const int start_col = l->column;
+    const bool negative = CURRENT(l) == '-';
+    uint32_t magnitude = 0;
+    const uint32_t limit = negative ? (uint32_t)INT32_MAX + 1U : (uint32_t)INT32_MAX;
+
+    if (negative)
+        CONSUME(l);
+
+    bool out_of_range = false;
+    while (is_ascii_digit(CURRENT(l))) {
+        const uint32_t digit = (uint32_t)(CURRENT(l) - '0');
+        if (!out_of_range) {
+            if (magnitude > (limit - digit) / 10U)
+                out_of_range = true;
+            else
+                magnitude = magnitude * 10U + digit;
+        }
+        CONSUME(l);
+    }
+
+    if (out_of_range) {
+        lexer_error(l, start_line, start_col,
+                    "integer literal is outside the int32 range",
+                    "Use a value between -2147483648 and 2147483647.");
+        push_token(l, (token){
+            .type = INVALID,
+            .line = start_line,
+            .column = start_col,
+        });
+        return;
+    }
+
+    const int32_t value = negative
+        ? (magnitude == (uint32_t)INT32_MAX + 1U
+            ? INT32_MIN
+            : -(int32_t)magnitude)
+        : (int32_t)magnitude;
+
+    const token t = (token){
+        .type = NUM,
+        .num = value,
+        .line = start_line,
+        .column = start_col,
+    };
+    push_token(l, t);
 }
 
 static void scan_comment(lexer_state *l) {
@@ -152,22 +199,25 @@ static void scan_operator(lexer_state *l) {
         .column = l->column
     };
     CONSUME(l);
-    PUSH_TOKEN(l, t);
+    push_token(l, t);
 }
 
-token_vec lexer(const char* source) {
+token_vec lexer(const char* source, diagnostic_list* diagnostics) {
     lexer_state l = {
-        .start = source,
         .current = source,
         .line = 1,
         .column = 1,
+        .diagnostics = diagnostics,
     };
-    token_vec_init(&l.tokens);
+    if (!token_vec_init(&l.tokens)) {
+        diagnostics->allocation_failed = true;
+        return l.tokens;
+    }
 
-    while (!AT_END(&l)) {
+    while (!AT_END(&l) && !l.failed) {
         const char c = CURRENT(&l);
 
-        if (isspace(c)) {
+        if (is_space(c)) {
             CONSUME(&l);
             continue;
         }
@@ -175,11 +225,11 @@ token_vec lexer(const char* source) {
             scan_comment(&l);
             continue;
         }
-        if (isalpha(c)) {
+        if (is_ascii_alpha(c)) {
             scan_word(&l);
             continue;
         }
-        if ( isdigit(c) || (c == '-' && isdigit(PEEK(&l)))) {
+        if (is_ascii_digit(c) || (c == '-' && is_ascii_digit(PEEK(&l)))) {
             scan_number(&l);
             continue;
         }
@@ -188,15 +238,24 @@ token_vec lexer(const char* source) {
             continue;
         }
 
-        lexer_error(&l, "Unexpected character");
+        lexer_error(&l, l.line, l.column, "Unexpected character",
+                    "Remove this character or replace it with a valid Kage token.");
+        push_token(&l, (token){
+            .type = INVALID,
+            .line = l.line,
+            .column = l.column,
+        });
+        CONSUME(&l);
     }
+
+    if (l.failed)
+        return l.tokens;
 
     const token eof = (token){
         .type = EOF_TOKEN,
         .line = l.line,
         .column = l.column
     };
-    PUSH_TOKEN(&l, eof);
-
+    push_token(&l, eof);
     return l.tokens;
 }

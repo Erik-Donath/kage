@@ -3,6 +3,7 @@
 //
 
 #pragma once
+#include <stdbool.h>
 #include <stdint.h>
 #include <stddef.h>
 
@@ -24,6 +25,7 @@ typedef enum {
     LABEL         = 104,
 
     EOF_TOKEN     = 105,
+    INVALID       = 106,
 } token_type;
 // All Token types less than 100 result in an instruction inside the ir. All Tokens above and equals 100 will not result in an instruction.
 
@@ -46,7 +48,7 @@ typedef struct {
 
 extern const char* token_names[];
 
-void token_vec_init(token_vec* vec);
+bool token_vec_init(token_vec* vec);
 void token_vec_free(token_vec* vec);
-void token_vec_push(token_vec* vec, token token);
+bool token_vec_push(token_vec* vec, token token);
 void token_dump(const token_vec* vec);

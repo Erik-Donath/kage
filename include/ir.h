@@ -68,6 +68,5 @@ typedef struct {
 extern const char* ir_type_names[];
 extern const char* op_names[];
 
-void ir_arr_init(ir_arr* arr, size_t length);
 void ir_arr_free(ir_arr* arr);
 void ir_dump(const ir_arr* arr);

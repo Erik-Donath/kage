@@ -3,7 +3,8 @@
 //
 
 #pragma once
+#include "diagnostics.h"
 #include "tokens.h"
 #include "ir.h"
 
-ir_arr parse(const token_vec* vec);
+bool parse(const token_vec* vec, diagnostic_list* diagnostics, ir_arr* result);

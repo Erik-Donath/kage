@@ -2,6 +2,7 @@
 build/
 cmake-build-*/
 out/
+.idea/
 
 # CMake
 CMakeCache.txt
@@ -20,6 +21,12 @@ build.ninja
 kage
 *.exe
 *.out
+*.o
+*.obj
+*.a
+*.so
+*.dylib
+*.dll
 
 # OS files
 .DS_Store

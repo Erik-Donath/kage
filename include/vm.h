@@ -6,4 +6,4 @@
 #include "ir.h"
 #include "args.h"
 
-void run_vm(const ir_arr* ir, const args* args);
+int run_vm(const ir_arr* ir, const args* args);

@@ -6,7 +6,7 @@ Kage is a minimal register-based esoteric programming language. Programs are seq
 
 ## Registers
 
-Every register holds a 32-bit signed integer in the range -2,147,483,648 to 2,147,483,647. Registers are identified by non-negative integers and are lazily initialized to `0`.
+Every register holds a 32-bit signed integer in the range -2,147,483,648 to 2,147,483,647. Registers are identified by non-negative integer addresses and are lazily initialized to `0`. Negative register addresses and integer literals outside this range are errors.
 
 Register 0 is the zero register. Reading it always returns `0`. Writing to it is silently ignored. It cannot be repurposed.
 
@@ -175,18 +175,6 @@ OP          ::= '+' | '-' | '*' | '/' | '%'
 NUM         ::= -?[0-9]+
 LABEL       ::= [a-zA-Z]{1,31}   (not a keyword)
 ```
-
----
-
-## Errors
-
-| Error      | Cause                                                                |
-|------------|----------------------------------------------------------------------|
-| LexerError | Unknown character; word that is neither a keyword nor a valid label  |
-| ParseError | Unexpected token or incomplete instruction                           |
-| LabelError | Jump to a label that was never defined; label defined more than once |
-
-All errors report the line and column where the problem was detected.
 
 ---
 

@@ -3,6 +3,7 @@
 //
 
 #pragma once
+#include "diagnostics.h"
 #include "tokens.h"
 
-token_vec lexer(const char* file_content);
+token_vec lexer(const char* file_content, diagnostic_list* diagnostics);

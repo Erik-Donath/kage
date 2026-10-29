@@ -3,13 +3,19 @@
 //
 
 #include "tokens.h"
+#include <stdint.h>
 #include <stdlib.h>
 #include <stdio.h>
 
-void token_vec_init(token_vec* vec) {
+bool token_vec_init(token_vec* vec) {
     vec->len = 0;
     vec->cap = 16;
     vec->tokens = malloc(sizeof(token) * vec->cap);
+    if (!vec->tokens) {
+        vec->cap = 0;
+        return false;
+    }
+    return true;
 }
 
 void token_vec_free(token_vec* vec) {
@@ -23,12 +29,21 @@ void token_vec_free(token_vec* vec) {
     vec->cap = 0;
 }
 
-void token_vec_push(token_vec* vec, const token t) {
+bool token_vec_push(token_vec* vec, const token t) {
     if (vec->len >= vec->cap) {
-        vec->cap *= 2;
-        vec->tokens = realloc(vec->tokens, vec->cap * sizeof(vec->tokens[0]));
+        if (vec->cap > SIZE_MAX / 2 ||
+            vec->cap * 2 > SIZE_MAX / sizeof(vec->tokens[0]))
+            return false;
+
+        const size_t new_cap = vec->cap * 2;
+        token* tokens = realloc(vec->tokens, new_cap * sizeof(vec->tokens[0]));
+        if (!tokens)
+            return false;
+        vec->tokens = tokens;
+        vec->cap = new_cap;
     }
     vec->tokens[vec->len++] = t;
+    return true;
 }
 
 const char* token_names[] = {
@@ -45,6 +60,7 @@ const char* token_names[] = {
     [OP]            = "OP",
     [LABEL]         = "LABEL",
     [EOF_TOKEN]     = "EOF_TOKEN",
+    [INVALID]       = "INVALID",
 };
 
 void token_dump(const token_vec* vec) {
