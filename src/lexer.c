@@ -84,12 +84,12 @@ static void lexer_error(lexer_state* l, const int line, const int column,
 static void scan_word(lexer_state *l) {
     const int start_line = l->line;
     const int start_col = l->column;
-    char word[MAX_SCAN_WORD_LEN];
+    char word[MAX_SCAN_WORD_LEN + 1];
     size_t len = 0;
 
     bool too_long = false;
     while (is_ascii_alpha(CURRENT(l))) {
-        if (len < MAX_SCAN_WORD_LEN - 1)
+        if (len < MAX_SCAN_WORD_LEN)
             word[len++] = CURRENT(l);
         else
             too_long = true;
@@ -202,12 +202,13 @@ static void scan_operator(lexer_state *l) {
     push_token(l, t);
 }
 
-token_vec lexer(const char* source, diagnostic_list* diagnostics) {
+token_vec lexer(const char* file_content, diagnostic_list* diagnostics) {
     lexer_state l = {
-        .current = source,
+        .current = file_content,
         .line = 1,
         .column = 1,
         .diagnostics = diagnostics,
+        .failed = false,
     };
     if (!token_vec_init(&l.tokens)) {
         diagnostics->allocation_failed = true;
