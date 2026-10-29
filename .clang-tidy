@@ -1,0 +1,9 @@
+Checks: >
+  -*,
+  clang-analyzer-core.*,
+  clang-analyzer-deadcode.*,
+  bugprone-*,
+  -bugprone-signed-bitwise,
+  -bugprone-easily-swappable-parameters
+WarningsAsErrors: ''
+HeaderFilterRegex: '.*/(src|include)/.*'

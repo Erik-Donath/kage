@@ -58,6 +58,10 @@ ctest --test-dir build --output-on-failure
 
 The test suite uses CTest to run Kage programs and verify their exact output, including integer-boundary behavior and expected diagnostics. It does not add a C++ or GoogleTest dependency to this C project.
 
+### VS Code
+
+Open the project folder in VS Code and install the recommended extensions when prompted. CMake Tools configures a Debug build in `build/vscode`, and its CMake view can be used to build the project and run the CTest suite. Select the `kage` launch target and press F5 to debug the arithmetic example with GDB. The C/C++ extension uses the generated compile commands for IntelliSense, runs clang-tidy on save, and formats C files with the repository's `.clang-format` style.
+
 ### Run
 
 ```sh
