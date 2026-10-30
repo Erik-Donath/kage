@@ -26,7 +26,7 @@ typedef struct {
     void* write_ctx;
 } vm_state;
 
-static bool read_stdin(const void * ctx, int32_t* value) {
+static bool read_stdin(void* ctx, int32_t* value) {
     (void)ctx;
     const int c = getchar();
     if (c == EOF) {
@@ -40,7 +40,7 @@ static bool read_stdin(const void * ctx, int32_t* value) {
     return true;
 }
 
-static bool write_stdout(const void * ctx, const int32_t value) {
+static bool write_stdout(void* ctx, const int32_t value) {
     (void)ctx;
     return putchar((unsigned char)value) != EOF;
 }

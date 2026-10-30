@@ -1,262 +1,296 @@
 //
 // Created by erikd on 04.06.26.
+// Refactored by erikd on 29.10.26
 //
 
-#include "lexer.h"
 #include <stdbool.h>
-#include <stdint.h>
+
+#include "lexer.h"
+
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
-typedef struct {
-    const char *current;
+static const char* lexer_token_kind_names[] = {
+    [TOK_INVALID] = "INVALID",
 
-    int line;
-    int column;
+    [TOK_STORE_LIT] = "STORE_LIT",
+    [TOK_STORE_COPY] = "STORE_COPY",
+    [TOK_STORE_ARITH] = "STORE_ARITH",
+    [TOK_FLOW_LABEL] = "FLOW_LABEL",
+    [TOK_FLOW_JUMP] = "FLOW_JUMP",
+    [TOK_FLOW_CJUMP] = "FLOW_CJUMP",
+    [TOK_IO_PUTC] = "IO_PUTC",
+    [TOK_IO_GETC] = "IO_GETC",
+    [TOK_IO_PUTI] = "IO_PUTI",
 
-    token_vec tokens;
-    diagnostic_list* diagnostics;
-    bool failed;
-} lexer_state;
+    [TOK_NUM] = "NUM",
+    [TOK_LABEL] = "LABEL",
+    [TOK_OP] = "OP",
 
-#define CURRENT(l) (*(l)->current)
-#define PEEK(l) ((l)->current[1])
-#define AT_END(l) (CURRENT(l) == '\0')
-
-#define CONSUME(l) lexer_consume(l)
-
-static bool is_ascii_alpha(const char c) {
-    return (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z');
-}
-
-static bool is_ascii_digit(const char c) {
-    return c >= '0' && c <= '9';
-}
-
-static bool is_space(const char c) {
-    return c == ' ' || c == '\t' || c == '\n' || c == '\r' || c == '\v' || c == '\f';
-}
-
-static void push_token(lexer_state *l, const token t) {
-    if (!token_vec_push(&l->tokens, t)) {
-        l->failed = true;
-        l->diagnostics->allocation_failed = true;
-    }
-}
-
-static const struct {
-    token_type type;
-    const char *keyword;
-} keywords[] = {
-    { STORE_LIT,      "yami"   },
-    { STORE_CPY,      "Yami"   },
-    { STORE_EXP,      "YAMI"   },
-
-    { FLOW_LAB,       "hikari" },
-    { FLOW_JMP,       "Hikari" },
-    { FLOW_COND_JMP,  "HIKARI" },
-
-    { IO_PRINT,       "rei"    },
-    { IO_READ,        "Rei"    },
-    { IO_DEC_PRINT,   "REI"    }
+    [TOK_EOF] = "EOF",
+    [TOK_ERROR] = "ERROR",
 };
 
-#define KEYWORD_COUNT (sizeof(keywords) / sizeof(keywords[0]))
+_Static_assert(sizeof(lexer_token_kind_names) / sizeof(lexer_token_kind_names[0]) == LEXER_TOKEN_KIND_COUNT,
+    "Lexer: lexer_token_kind_names must be in sync with lexer_token_kind.");
 
-static void lexer_consume(lexer_state *l) {
-    if (CURRENT(l) == '\n') {
-        l->line++;
-        l->column = 1;
+#define STR_(x) #x
+#define STR(x)  STR_(x)
+
+#define INITIAL_TOKEN_VECTOR_CAP 16
+
+typedef struct {
+    const char* cur;
+    uint32_t line;
+    const char* line_start; // Can be used to calculate column.
+
+    size_t error_count;
+
+    // token vector
+    lexer_token* tokens;
+    size_t tokens_len, tokens_cap;
+} lexer_state;
+
+// Helpers
+
+static inline unsigned char current(const lexer_state* s) {
+    return (unsigned char)*s->cur;
+}
+
+static inline unsigned char peek(const lexer_state* s) {
+    return (*s->cur) ? (unsigned char)*(s->cur + 1) : '\0'; // If the current is 0 everything after it should be treated like it is 0 as well.
+}
+
+static void advance(lexer_state* s) {
+    if (current(s) == '\n') {
+        s->line++;
+        s->line_start = s->cur + 1;
     }
-    else
-        l->column++;
-    l->current++;
+    s->cur++;
 }
 
-static void lexer_error(lexer_state* l, const int line, const int column,
-                        const char* message, const char* help) {
-    if (!diagnostics_add(l->diagnostics, DIAGNOSTIC_LEXER,
-                         line, column, message, help))
-        l->failed = true;
+static inline bool is_digit(const unsigned char c) {
+    return (c >= '0' && c <= '9');
+}
+static inline bool is_alpha(const unsigned char c) {
+    return (c | 32) >= 'a' && (c | 32) <= 'z';
+}
+static inline bool is_skippable(const unsigned char c) {
+    return c == ' ' || c == '\t' || c == '\n' || c == '\r' || c == '\v' || c == '\f';
+}
+static inline bool is_operation(const unsigned char c) {
+    return c == '+' || c == '-' || c == '*' || c == '/' || c == '%';
 }
 
-#define MAX_SCAN_WORD_LEN 32
-static void scan_word(lexer_state *l) {
-    const int start_line = l->line;
-    const int start_col = l->column;
-    char word[MAX_SCAN_WORD_LEN + 1];
-    size_t len = 0;
-
-    bool too_long = false;
-    while (is_ascii_alpha(CURRENT(l))) {
-        if (len < MAX_SCAN_WORD_LEN)
-            word[len++] = CURRENT(l);
+static void skip_trivs(lexer_state* s) {
+    for (;;) {
+        if (is_skippable(current(s)))
+            advance(s);
+        else if (current(s) == '#') {
+            const char* cur_line = s->line_start;
+            while (s->line_start == cur_line && current(s))
+                advance(s);
+        }
         else
-            too_long = true;
-        CONSUME(l);
-    }
-
-    word[len] = '\0';
-    if (too_long) {
-        lexer_error(l, start_line, start_col,
-                    "word exceeds maximum length of 31 characters",
-                    "Shorten this label to 31 ASCII letters or fewer.");
-        push_token(l, (token){
-            .type = INVALID,
-            .line = start_line,
-            .column = start_col,
-        });
-        return;
-    }
-    for (size_t i = 0; i < KEYWORD_COUNT; ++i) {
-        if (strcmp(word, keywords[i].keyword) == 0) {
-            const token t = (token){
-                .type = keywords[i].type,
-                .line = start_line,
-                .column = start_col,
-            };
-            push_token(l, t);
             return;
-        }
     }
+}
 
-    char *copy = malloc(len + 1);
-    if (!copy) {
-        l->failed = true;
-        l->diagnostics->allocation_failed = true;
-        return;
-    }
-    memcpy(copy, word, len + 1);
-
-    const token t = (token){
-        .type = LABEL,
-        .str = copy,
-        .line = start_line,
-        .column = start_col,
+static inline lexer_token make(const lexer_state* s, const char* start, const lexer_token_kind kind) {
+    return (lexer_token){
+        .kind = kind,
+        .line = s->line,
+        .column = (uint32_t)(start - s->line_start + 1),
+        .text = start,
+        .len  = (uint32_t)(s->cur - start),
     };
-    push_token(l, t);
 }
 
-static void scan_number(lexer_state *l) {
-    const int start_line = l->line;
-    const int start_col = l->column;
-    const bool negative = CURRENT(l) == '-';
-    uint32_t magnitude = 0;
-    const uint32_t limit = negative ? (uint32_t)INT32_MAX + 1U : (uint32_t)INT32_MAX;
+static inline lexer_token make_error(const lexer_state* s, const char* start, const char* msg) {
+    lexer_token t = make(s, start, TOK_ERROR);
+    t.error = msg;
+    return t;
+}
 
-    if (negative)
-        CONSUME(l);
+// Tokenizer
 
-    bool out_of_range = false;
-    while (is_ascii_digit(CURRENT(l))) {
-        const uint32_t digit = (uint32_t)(CURRENT(l) - '0');
-        if (!out_of_range) {
-            if (magnitude > (limit - digit) / 10U)
-                out_of_range = true;
-            else
-                magnitude = magnitude * 10U + digit;
-        }
-        CONSUME(l);
+#define MAX_LABEL_LEN 31
+
+#define KW(str, k) {str, sizeof(str) - 1, k }
+static const struct {
+    const char*      kw;
+    size_t           len;
+    lexer_token_kind kind;
+} keywords[] = {
+    KW("yami",   TOK_STORE_LIT),  KW("Yami",   TOK_STORE_COPY),  KW("YAMI",   TOK_STORE_ARITH),
+    KW("hikari", TOK_FLOW_LABEL), KW("Hikari", TOK_FLOW_JUMP),   KW("HIKARI", TOK_FLOW_CJUMP),
+    KW("rei",    TOK_IO_PUTC),    KW("Rei",    TOK_IO_GETC),     KW("REI",    TOK_IO_PUTI),
+};
+#undef KW
+
+static lexer_token scan_word(lexer_state* s) {
+    const char* start = s->cur;
+    while (is_alpha(current(s)))
+        advance(s);
+    const size_t len = (size_t)(s->cur - start);
+
+    for (size_t i = 0; i < sizeof(keywords) / sizeof(keywords[0]); ++i) {
+        if (keywords[i].len == len && memcmp(keywords[i].kw, start, len) == 0)
+            return make(s, start, keywords[i].kind);
     }
 
-    if (out_of_range) {
-        lexer_error(l, start_line, start_col,
-                    "integer literal is outside the int32 range",
-                    "Use a value between -2147483648 and 2147483647.");
-        push_token(l, (token){
-            .type = INVALID,
-            .line = start_line,
-            .column = start_col,
-        });
-        return;
+    if (len > MAX_LABEL_LEN)
+        return make_error(s, start, "Lexer: Label longer than " STR(MAX_LABEL_LEN) " characters.\n\tHelp: Shorten this label to " STR(MAX_LABEL_LEN) " ASCII letters or fewer.");
+
+    return make(s, start, TOK_LABEL);
+}
+
+static lexer_token scan_number(lexer_state* s) {
+    const char* start = s->cur;
+
+    char* end;
+    const long long v = strtoll(start, &end, 10);
+    s->cur = end;   // consume whole lexeme
+
+    if (v < INT32_MIN || v > INT32_MAX)
+        return make_error(s, start,
+            "Lexer: Integer out of 32-bit range. \n\tUse a value between -2147483648 and 2147483647. For Registers use a value between 0 and 2147483647."
+        );
+
+    lexer_token t = make(s, start, TOK_NUM);
+    t.num = (int32_t)v;
+    return t;
+}
+
+static lexer_token next_token(lexer_state* s) {
+    skip_trivs(s);
+    const char* start = s->cur;
+    const unsigned char c = current(s);
+
+    if (c == '\0')
+        return make(s, start, TOK_EOF);
+    if (is_alpha(c))
+        return scan_word(s);
+    if (is_digit(c) || (c == '-' && is_digit(peek(s))))
+        return scan_number(s);
+    if (is_operation(c)) {
+        advance(s);
+        lexer_token t = make(s, start, TOK_OP);
+        t.op = (char)c;
+        return t;
     }
 
-    const int32_t value = negative
-        ? (magnitude == (uint32_t)INT32_MAX + 1U
-            ? INT32_MIN
-            : -(int32_t)magnitude)
-        : (int32_t)magnitude;
-
-    const token t = (token){
-        .type = NUM,
-        .num = value,
-        .line = start_line,
-        .column = start_col,
-    };
-    push_token(l, t);
+    advance(s);
+    return make_error(s, start,
+        "Lexer: Unexpected character. \n\tHelp: Remove this character or replace it with a valid Kage token."
+    );
 }
 
-static void scan_comment(lexer_state *l) {
-    while (!AT_END(l) && CURRENT(l) != '\n')
-        CONSUME(l);
-}
-
-static void scan_operator(lexer_state *l) {
-    const token t = (token){
-        .type = OP,
-        .op = CURRENT(l),
-        .line = l->line,
-        .column = l->column
-    };
-    CONSUME(l);
-    push_token(l, t);
-}
-
-token_vec lexer(const char* file_content, diagnostic_list* diagnostics) {
-    lexer_state l = {
-        .current = file_content,
+lexer_result lexer_tokenize(const char* source) {
+    lexer_state s = (lexer_state){
+        .cur = source,
+        .line_start = source,
         .line = 1,
-        .column = 1,
-        .diagnostics = diagnostics,
-        .failed = false,
+        .error_count = 0,
+        .tokens = malloc(sizeof(lexer_token) * INITIAL_TOKEN_VECTOR_CAP),
+        .tokens_cap = INITIAL_TOKEN_VECTOR_CAP,
+        .tokens_len = 0,
     };
-    if (!token_vec_init(&l.tokens)) {
-        diagnostics->allocation_failed = true;
-        return l.tokens;
+    if (!s.tokens) {
+        fprintf(stderr, "Lexer: Out of Memory");
+        return (lexer_result){0};
     }
 
-    while (!AT_END(&l) && !l.failed) {
-        const char c = CURRENT(&l);
+    for (;;) {
+        const lexer_token t = next_token(&s);
 
-        if (is_space(c)) {
-            CONSUME(&l);
-            continue;
-        }
-        if (c == '#') {
-            scan_comment(&l);
-            continue;
-        }
-        if (is_ascii_alpha(c)) {
-            scan_word(&l);
-            continue;
-        }
-        if (is_ascii_digit(c) || (c == '-' && is_ascii_digit(PEEK(&l)))) {
-            scan_number(&l);
-            continue;
-        }
-        if (c== '+' || c == '-' || c == '*' || c == '/' || c == '%') {
-            scan_operator(&l);
-            continue;
+        if (s.tokens_cap == s.tokens_len) {
+            const size_t new_cap = s.tokens_cap * 2;
+            lexer_token* new_tokens = realloc(s.tokens, sizeof(lexer_token) * new_cap);
+            if (!new_tokens) {
+                fprintf(stderr, "Lexer: Out of Memory");
+                free(s.tokens);
+                return (lexer_result){0};
+            }
+
+            s.tokens = new_tokens;
+            s.tokens_cap = new_cap;
         }
 
-        lexer_error(&l, l.line, l.column, "Unexpected character",
-                    "Remove this character or replace it with a valid Kage token.");
-        push_token(&l, (token){
-            .type = INVALID,
-            .line = l.line,
-            .column = l.column,
-        });
-        CONSUME(&l);
+        s.tokens[s.tokens_len++] = t;
+        if (t.kind == TOK_ERROR)
+            s.error_count++;
+        if (t.kind == TOK_EOF)
+            break;
     }
 
-    if (l.failed)
-        return l.tokens;
-
-    const token eof = (token){
-        .type = EOF_TOKEN,
-        .line = l.line,
-        .column = l.column
+    return (lexer_result){
+        .tokens = s.tokens,
+        .token_count = s.tokens_len,
+        .error_count = s.error_count,
     };
-    push_token(&l, eof);
-    return l.tokens;
+}
+
+void lexer_free(lexer_result* lr) {
+    free(lr->tokens);
+    lr->tokens      = NULL;
+    lr->token_count = 0;
+    lr->error_count = 0;
+}
+
+const char* lexer_token_kind_name(const lexer_token_kind kind) {
+    if ((unsigned)kind >= LEXER_TOKEN_KIND_COUNT || !lexer_token_kind_names[kind])
+        return "?";
+    return lexer_token_kind_names[kind];
+}
+
+void lexer_dump_tokens(const lexer_result* lr) {
+    // The lexeme column is as wide as the longest quoted lexeme.
+    int lex_width = 6; // "LEXEME"
+    for (size_t i = 0; i < lr->token_count; ++i) {
+        const int w = (int)lr->tokens[i].len + 2; // + 2 quotes
+        if (w > lex_width)
+            lex_width = w;
+    }
+
+    printf("\n=== TOKEN DUMP ===\n");
+    printf("%-5s  %-12s  %-8s  %-*s  %s\n", "IDX", "KIND", "LOC", lex_width, "LEXEME", "DATA");
+
+    for (size_t i = 0; i < lr->token_count; ++i) {
+        const lexer_token* t = &lr->tokens[i];
+
+        char loc[24];
+        snprintf(loc, sizeof loc, "%u:%u", t->line, t->column);
+
+        // IDX, KIND, LOC
+        printf("%04zu   %-12s  %-8s  ", i, lexer_token_kind_name(t->kind), loc);
+
+        // LEXEME (quoted, padded to the column width; EOF has none)
+        if (t->kind == TOK_EOF) {
+            printf("%-*s  ", lex_width, "");
+        } else {
+            printf("\"%.*s\"%*s  ", (int)t->len, t->text, lex_width - (int)t->len - 2, "");
+        }
+
+        // DATA
+        switch (t->kind) {
+        case TOK_NUM:
+            printf("val=%d", t->num);
+            break;
+        case TOK_OP:
+            printf("op='%c'", t->op);
+            break;
+        case TOK_ERROR:
+            printf("error=\"%.*s\"", (int)strcspn(t->error, "\n"), t->error);
+            break;
+        default:
+            break;
+        }
+
+        printf("\n");
+    }
+
+    printf("\n%zu tokens, %zu errors\n", lr->token_count, lr->error_count);
+    printf("=== END TOKENS ===\n\n");
 }

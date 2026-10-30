@@ -55,8 +55,8 @@ void diagnostics_free(diagnostic_list* list) {
 
 bool diagnostics_add(diagnostic_list* list,
                     diagnostic_kind kind,
-                    int line,
-                    int column,
+                    uint32_t line,
+                    uint32_t column,
                     const char* message,
                     const char* help) {
     if (!list)
@@ -107,7 +107,7 @@ void diagnostics_report(const diagnostic_list* list) {
 
     for (size_t i = 0; i < list->len; ++i) {
         const diagnostic* item = &list->items[i];
-        fprintf(stderr, "%s (%d:%d): %s\n",
+        fprintf(stderr, "%s (%u:%u): %s\n",
                 diagnostic_name(item->kind),
                 item->line,
                 item->column,

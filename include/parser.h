@@ -1,10 +1,8 @@
-//
-// Created by erikd on 04.06.26.
-//
-
 #pragma once
+#include <stdbool.h>
 #include "diagnostics.h"
-#include "tokens.h"
+#include "lexer.h"
 #include "ir.h"
 
-bool parse(const token_vec* vec, diagnostic_list* diagnostics, ir_arr* result);
+// The lexer result (and the source it points into) must outlive this call.
+bool parse(const lexer_result* lexer, diagnostic_list* diagnostics, ir_arr* result);

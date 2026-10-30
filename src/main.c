@@ -4,7 +4,6 @@
 
 #include "args.h"
 #include "version.h"
-#include "tokens.h"
 #include "diagnostics.h"
 #include "lexer.h"
 #include "parser.h"
@@ -107,19 +106,20 @@ int main(const int argc, const char *argv[]) {
         return EXIT_FAILURE;
     }
 
+    lexer_result lexer = lexer_tokenize(code);
+    //if (lexer.error_count)
+    //    return EXIT_FAILURE;
+
+    if (a.flags & VERBOSE)
+        lexer_dump_tokens(&lexer);
+
+
     diagnostic_list diagnostics;
     diagnostics_init(&diagnostics);
-    token_vec vec = lexer(code, &diagnostics);
-
-    if (!(a.flags & CODE))
-        free(file_code);
-
-    if ((a.flags & VERBOSE) && vec.len > 0)
-        token_dump(&vec);
 
     ir_arr ir = {0};
-    const bool parsed = parse(&vec, &diagnostics, &ir);
-    token_vec_free(&vec);
+    const bool parsed = parse(&lexer, &diagnostics, &ir);
+    lexer_free(&lexer);
 
     if (!parsed || diagnostics.len > 0 || diagnostics.allocation_failed) {
         diagnostics_report(&diagnostics);
@@ -133,6 +133,9 @@ int main(const int argc, const char *argv[]) {
         ir_dump(&ir);
         printf("\n=== RUN ===\n");
     }
+
+    if (!(a.flags & CODE))
+        free(file_code);
 
     const int exit_code = run_vm(&ir, &a);
     ir_arr_free(&ir);
