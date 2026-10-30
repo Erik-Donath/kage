@@ -6,6 +6,7 @@
 
 #include <stdbool.h>
 #include <stddef.h>
+#include <stdint.h>
 
 typedef enum {
     DIAGNOSTIC_LEXER,
@@ -15,8 +16,8 @@ typedef enum {
 
 typedef struct {
     diagnostic_kind kind;
-    int line;
-    int column;
+    uint32_t line;
+    uint32_t column;
     char* message;
     char* help;
 } diagnostic;
@@ -32,8 +33,8 @@ void diagnostics_init(diagnostic_list* list);
 void diagnostics_free(diagnostic_list* list);
 bool diagnostics_add(diagnostic_list* list,
                     diagnostic_kind kind,
-                    int line,
-                    int column,
+                    uint32_t line,
+                    uint32_t column,
                     const char* message,
                     const char* help);
 void diagnostics_report(const diagnostic_list* list);

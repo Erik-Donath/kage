@@ -26,11 +26,10 @@ add_executable(
         src/args.c
         src/diagnostics.c
         src/ir.c
-        src/lexer.c
         src/main.c
         src/parser.c
-        src/tokens.c
         src/vm.c
+        src/lexer.c
 )
 
 target_include_directories(

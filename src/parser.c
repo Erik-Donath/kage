@@ -1,7 +1,3 @@
-//
-// Created by erikd on 04.06.26.
-//
-
 #include "parser.h"
 
 #include <stdint.h>
@@ -10,19 +6,21 @@
 #include <string.h>
 
 typedef struct {
-    const char* name;
+    const char* name;   // points into source, NOT NUL-terminated
+    size_t len;
     size_t target;
 } label_entry;
 
 typedef struct {
     const char* name;
+    size_t len;
     size_t instruction;
-    int line;
-    int column;
+    uint32_t line;
+    uint32_t column;
 } jump_patch;
 
 typedef struct {
-    const token_vec* tokens;
+    const lexer_result* tokens;
     diagnostic_list* diagnostics;
     size_t pos;
 
@@ -43,30 +41,34 @@ typedef struct {
     size_t register_capacity;
 } parser;
 
-static token current(const parser* p) {
+static lexer_token current(const parser* p) {
     return p->tokens->tokens[p->pos];
 }
 
-static const char* expected_help(const token_type type) {
-    switch (type) {
-        case NUM:
+static bool label_eq(const char* a, const size_t a_len, const char* b, const size_t b_len) {
+    return a_len == b_len && memcmp(a, b, a_len) == 0;
+}
+
+static const char* expected_help(const lexer_token_kind kind) {
+    switch (kind) {
+        case TOK_NUM:
             return "Add a number or register address here (for example, 1).";
-        case OP:
+        case TOK_OP:
             return "Insert one of: +, -, *, /, %.";
-        case LABEL:
+        case TOK_LABEL:
             return "Define a label with hikari <name> or correct the jump target.";
         default:
             return "Check the instruction spelling and operand order.";
     }
 }
 
-static bool consume(parser* p, const token_type expected, token* result) {
-    const token t = current(p);
-    if (t.type != expected) {
-        if (t.type != INVALID) {
+static bool consume(parser* p, const lexer_token_kind expected, lexer_token* result) {
+    const lexer_token t = current(p);
+    if (t.kind != expected) {
+        if (t.kind != TOK_ERROR) {   // lexer errors are already reported
             char message[192];
-            snprintf(message, sizeof(message), "expected %s(%d) but got %s(%d)",
-                     token_names[expected], expected, token_names[t.type], t.type);
+            snprintf(message, sizeof(message), "expected %s but got %s",
+                     lexer_token_kind_name(expected), lexer_token_kind_name(t.kind));
             diagnostics_add(p->diagnostics, DIAGNOSTIC_PARSER,
                             t.line, t.column, message, expected_help(expected));
         }
@@ -74,12 +76,12 @@ static bool consume(parser* p, const token_type expected, token* result) {
     }
 
     *result = t;
-    if (p->pos + 1 < p->tokens->len)
+    if (p->pos + 1 < p->tokens->token_count)
         p->pos++;
     return true;
 }
 
-static bool normalize_register(parser* p, const token t, uint32_t* result) {
+static bool normalize_register(parser* p, const lexer_token t, uint32_t* result) {
     if (t.num < 0) {
         diagnostics_add(p->diagnostics, DIAGNOSTIC_PARSER,
                         t.line, t.column, "register address must be non-negative",
@@ -130,22 +132,22 @@ static bool normalize_register(parser* p, const token t, uint32_t* result) {
 }
 
 static bool parse_register(parser* p, uint32_t* result) {
-    token t;
-    return consume(p, NUM, &t) && normalize_register(p, t, result);
+    lexer_token t;
+    return consume(p, TOK_NUM, &t) && normalize_register(p, t, result);
 }
 
-static bool is_instruction_start(const token_type type) {
-    return type == NUM || type == FLOW_LAB || type == FLOW_JMP ||
-           type == FLOW_COND_JMP || type == IO_PRINT || type == IO_READ ||
-           type == IO_DEC_PRINT;
+static bool is_instruction_start(const lexer_token_kind kind) {
+    return kind == TOK_NUM || kind == TOK_FLOW_LABEL || kind == TOK_FLOW_JUMP ||
+           kind == TOK_FLOW_CJUMP || kind == TOK_IO_PUTC || kind == TOK_IO_GETC ||
+           kind == TOK_IO_PUTI;
 }
 
 static void synchronize(parser* p, const size_t start) {
-    if (p->pos == start && current(p).type != EOF_TOKEN)
+    if (p->pos == start && current(p).kind != TOK_EOF)
         p->pos++;
 
-    while (current(p).type != EOF_TOKEN &&
-           !is_instruction_start(current(p).type))
+    while (current(p).kind != TOK_EOF &&
+           !is_instruction_start(current(p).kind))
         p->pos++;
 }
 
@@ -158,9 +160,9 @@ static bool append_instruction(parser* p, const ir_instruction instruction) {
     return true;
 }
 
-static bool parse_numeric_instruction(parser* p, const token leading) {
-    token keyword;
-    if (p->pos + 1 >= p->tokens->len) {
+static bool parse_numeric_instruction(parser* p, const lexer_token leading) {
+    lexer_token keyword;
+    if (p->pos + 1 >= p->tokens->token_count) {
         diagnostics_add(p->diagnostics, DIAGNOSTIC_PARSER,
                         leading.line, leading.column, "expected store keyword",
                         "Follow a register address with yami, Yami, or YAMI.");
@@ -168,9 +170,9 @@ static bool parse_numeric_instruction(parser* p, const token leading) {
     }
     p->pos++;
     keyword = current(p);
-    if (keyword.type != STORE_LIT && keyword.type != STORE_CPY &&
-        keyword.type != STORE_EXP) {
-        if (keyword.type != INVALID)
+    if (keyword.kind != TOK_STORE_LIT && keyword.kind != TOK_STORE_COPY &&
+        keyword.kind != TOK_STORE_ARITH) {
+        if (keyword.kind != TOK_ERROR)
             diagnostics_add(p->diagnostics, DIAGNOSTIC_PARSER,
                             keyword.line, keyword.column, "expected store keyword",
                             "Follow a register address with yami, Yami, or YAMI.");
@@ -188,9 +190,9 @@ static bool parse_numeric_instruction(parser* p, const token leading) {
     }
     if (!normalize_register(p, leading, &dest))
         return false;
-    if (keyword.type == STORE_LIT) {
-        token literal;
-        if (!consume(p, NUM, &literal))
+    if (keyword.kind == TOK_STORE_LIT) {
+        lexer_token literal;
+        if (!consume(p, TOK_NUM, &literal))
             return false;
         return append_instruction(p, (ir_instruction){
             .type = INIT_REGISTER,
@@ -202,15 +204,15 @@ static bool parse_numeric_instruction(parser* p, const token leading) {
     if (!parse_register(p, &src1))
         return false;
 
-    if (keyword.type == STORE_CPY) {
+    if (keyword.kind == TOK_STORE_COPY) {
         return append_instruction(p, (ir_instruction){
             .type = COPY_REGISTER,
             .copy_register = { .src = src1, .dest = dest },
         });
     }
 
-    token op;
-    if (!consume(p, OP, &op))
+    lexer_token op;
+    if (!consume(p, TOK_OP, &op))
         return false;
     uint32_t src2;
     if (!parse_register(p, &src2))
@@ -238,11 +240,12 @@ static bool parse_numeric_instruction(parser* p, const token leading) {
     });
 }
 
-static bool add_label(parser* p, const token name) {
+static bool add_label(parser* p, const lexer_token name) {
     for (size_t i = 0; i < p->label_count; ++i) {
-        if (strcmp(p->labels[i].name, name.str) == 0) {
+        if (label_eq(p->labels[i].name, p->labels[i].len, name.text, name.len)) {
             char message[192];
-            snprintf(message, sizeof(message), "duplicate label %s", name.str);
+            snprintf(message, sizeof(message), "duplicate label %.*s",
+                     (int)name.len, name.text);
             diagnostics_add(p->diagnostics, DIAGNOSTIC_LABEL,
                             name.line, name.column, message,
                             "Rename this label or remove the earlier definition.");
@@ -254,19 +257,21 @@ static bool add_label(parser* p, const token name) {
         return false;
     }
     p->labels[p->label_count++] = (label_entry){
-        .name = name.str,
+        .name = name.text,
+        .len = name.len,
         .target = p->instruction_count,
     };
     return true;
 }
 
-static bool add_patch(parser* p, const token name) {
+static bool add_patch(parser* p, const lexer_token name) {
     if (p->patch_count >= p->patch_capacity) {
         p->diagnostics->allocation_failed = true;
         return false;
     }
     p->patches[p->patch_count++] = (jump_patch){
-        .name = name.str,
+        .name = name.text,
+        .len = name.len,
         .instruction = p->instruction_count,
         .line = name.line,
         .column = name.column,
@@ -275,50 +280,50 @@ static bool add_patch(parser* p, const token name) {
 }
 
 static bool parse_statement(parser* p) {
-    const token first = current(p);
-    if (first.type == NUM)
+    const lexer_token first = current(p);
+    if (first.kind == TOK_NUM)
         return parse_numeric_instruction(p, first);
 
-    if (first.type == FLOW_LAB) {
+    if (first.kind == TOK_FLOW_LABEL) {
         p->pos++;
-        token name;
-        if (!consume(p, LABEL, &name))
+        lexer_token name;
+        if (!consume(p, TOK_LABEL, &name))
             return false;
         add_label(p, name);
         return true;
     }
 
-    if (first.type == FLOW_JMP || first.type == FLOW_COND_JMP) {
+    if (first.kind == TOK_FLOW_JUMP || first.kind == TOK_FLOW_CJUMP) {
         p->pos++;
-        token name;
-        if (!consume(p, LABEL, &name))
+        lexer_token name;
+        if (!consume(p, TOK_LABEL, &name))
             return false;
 
         uint32_t condition = 0;
-        if (first.type == FLOW_COND_JMP && !parse_register(p, &condition))
+        if (first.kind == TOK_FLOW_CJUMP && !parse_register(p, &condition))
             return false;
 
         if (!add_patch(p, name))
             return false;
         return append_instruction(p, (ir_instruction){
-            .type = first.type == FLOW_JMP ? JMP : COND_JMP,
+            .type = first.kind == TOK_FLOW_JUMP ? JMP : COND_JMP,
             .jmp = { .target = 0, .cond = condition },
         });
     }
 
-    if (first.type == IO_READ || first.type == IO_PRINT ||
-        first.type == IO_DEC_PRINT) {
+    if (first.kind == TOK_IO_GETC || first.kind == TOK_IO_PUTC ||
+        first.kind == TOK_IO_PUTI) {
         p->pos++;
         uint32_t reg;
         if (!parse_register(p, &reg))
             return false;
 
-        if (first.type == IO_READ)
+        if (first.kind == TOK_IO_GETC)
             return append_instruction(p, (ir_instruction){
                 .type = IO_IN, .io_in = { .dest = reg },
             });
         return append_instruction(p, (ir_instruction){
-            .type = first.type == IO_PRINT ? IO_OUT : IO_DOUT,
+            .type = first.kind == TOK_IO_PUTC ? IO_OUT : IO_DOUT,
             .io_out = { .src = reg },
         });
     }
@@ -334,7 +339,7 @@ static void resolve_jumps(parser* p) {
         const jump_patch patch = p->patches[i];
         bool found = false;
         for (size_t j = 0; j < p->label_count; ++j) {
-            if (strcmp(patch.name, p->labels[j].name) == 0) {
+            if (label_eq(patch.name, patch.len, p->labels[j].name, p->labels[j].len)) {
                 p->instructions[patch.instruction].jmp.target = p->labels[j].target;
                 found = true;
                 break;
@@ -342,7 +347,8 @@ static void resolve_jumps(parser* p) {
         }
         if (!found) {
             char message[192];
-            snprintf(message, sizeof(message), "undefined label %s", patch.name);
+            snprintf(message, sizeof(message), "undefined label %.*s",
+                     (int)patch.len, patch.name);
             diagnostics_add(p->diagnostics, DIAGNOSTIC_LABEL,
                             patch.line, patch.column, message,
                             "Define this label with hikari before jumping to it.");
@@ -358,9 +364,9 @@ static void* allocate_array(const size_t count, const size_t element_size) {
     return calloc(count, element_size);
 }
 
-bool parse(const token_vec* vec, diagnostic_list* diagnostics, ir_arr* result) {
+bool parse(const lexer_result* lexer, diagnostic_list* diagnostics, ir_arr* result) {
     *result = (ir_arr){0};
-    if (!vec || vec->len == 0 || !vec->tokens) {
+    if (!lexer || lexer->token_count == 0 || !lexer->tokens) {
         diagnostics_add(diagnostics, DIAGNOSTIC_PARSER, 1, 1,
                         "token stream is empty", NULL);
         return false;
@@ -369,19 +375,25 @@ bool parse(const token_vec* vec, diagnostic_list* diagnostics, ir_arr* result) {
     size_t instruction_capacity = 0;
     size_t label_capacity = 0;
     size_t patch_capacity = 0;
-    for (size_t i = 0; i < vec->len; ++i) {
-        const token_type type = vec->tokens[i].type;
-        if (type == NUM || type == FLOW_JMP || type == FLOW_COND_JMP ||
-            type == IO_PRINT || type == IO_READ || type == IO_DEC_PRINT)
+    for (size_t i = 0; i < lexer->token_count; ++i) {
+        const lexer_token t = lexer->tokens[i];
+
+        // The lexer no longer reports diagnostics itself, so forward its errors here.
+        if (t.kind == TOK_ERROR)
+            diagnostics_add(diagnostics, DIAGNOSTIC_LEXER,
+                            t.line, t.column, t.error, NULL);
+
+        if (t.kind == TOK_NUM || t.kind == TOK_FLOW_JUMP || t.kind == TOK_FLOW_CJUMP ||
+            t.kind == TOK_IO_PUTC || t.kind == TOK_IO_GETC || t.kind == TOK_IO_PUTI)
             instruction_capacity++;
-        if (type == FLOW_LAB)
+        if (t.kind == TOK_FLOW_LABEL)
             label_capacity++;
-        if (type == FLOW_JMP || type == FLOW_COND_JMP)
+        if (t.kind == TOK_FLOW_JUMP || t.kind == TOK_FLOW_CJUMP)
             patch_capacity++;
     }
 
     parser p = {
-        .tokens = vec,
+        .tokens = lexer,
         .diagnostics = diagnostics,
         .instruction_capacity = instruction_capacity,
         .label_capacity = label_capacity,
@@ -396,9 +408,9 @@ bool parse(const token_vec* vec, diagnostic_list* diagnostics, ir_arr* result) {
         goto cleanup;
     }
 
-    while (current(&p).type != EOF_TOKEN && !diagnostics->allocation_failed) {
+    while (current(&p).kind != TOK_EOF && !diagnostics->allocation_failed) {
         const size_t start = p.pos;
-        if (current(&p).type == INVALID) {
+        if (current(&p).kind == TOK_ERROR) {
             p.pos++;
             synchronize(&p, start);
             continue;
