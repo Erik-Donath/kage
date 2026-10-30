@@ -141,7 +141,7 @@ static lexer_token scan_word(lexer_state* s) {
     }
 
     if (len > MAX_LABEL_LEN)
-        return make_error(s, start, "Lexer: Label longer than " STR(MAX_LABEL_LEN) " characters.\n\tHelp: Shorten this label to " STR(MAX_LABEL_LEN) " ASCII letters or fewer.");
+        return make_error(s, start, "Lexer: Word exceeds maximum length of " STR(MAX_LABEL_LEN) " characters.\n\tHelp: Shorten this label to " STR(MAX_LABEL_LEN) " ASCII letters or fewer.");
 
     return make(s, start, TOK_LABEL);
 }
@@ -155,7 +155,7 @@ static lexer_token scan_number(lexer_state* s) {
 
     if (v < INT32_MIN || v > INT32_MAX)
         return make_error(s, start,
-            "Lexer: Integer out of 32-bit range. \n\tUse a value between -2147483648 and 2147483647. For Registers use a value between 0 and 2147483647."
+            "Lexer: Integer literal is outside the int32 range.\n\tHelp: Use a value between -2147483648 and 2147483647. For Registers use a value between 0 and 2147483647."
         );
 
     lexer_token t = make(s, start, TOK_NUM);
