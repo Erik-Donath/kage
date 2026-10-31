@@ -158,6 +158,37 @@ Invalid: `yami` (keyword), `loop2` (contains digit), `my_label` (contains unders
 
 ## Grammar
 
+### Lexical structure
+
+A program is a sequence of tokens separated by whitespace and comments.
+Tokens are matched greedily: the longest possible match wins. Whitespace is
+only required between two tokens that would otherwise merge into one.
+
+```
+whitespace  ::= ' ' | '\t' | '\n' | '\r' | '\v' | '\f'
+comment     ::= '#' [^\n]*            (acts as whitespace)
+
+NUM         ::= '-'? [0-9]+           (must fit in a 32-bit signed integer)
+WORD        ::= [a-zA-Z]+             (longest run of letters)
+KEYWORD     ::= 'yami' | 'Yami' | 'YAMI'
+              | 'hikari' | 'Hikari' | 'HIKARI'
+              | 'rei' | 'Rei' | 'REI'
+LABEL       ::= WORD                  (not a KEYWORD, at most 31 letters)
+OP          ::= '+' | '-' | '*' | '/' | '%'
+```
+
+Notes:
+
+- A `-` immediately followed by a digit begins a `NUM`. `3 YAMI 1 - 2` is a
+  subtraction, but `3 YAMI 1 -2` and `3 YAMI 1-2` are not.
+- A word ends at the first non-letter and a number at the first non-digit, so
+  `1yami 5` equals `1 yami 5`, and `loop2` is the label `loop` followed by `2`.
+- Whitespace and comments can never appear inside a token, so `lo op` is two labels.
+- Any other character is a lexical error.
+- `\v` and `\f` are counted as one char for line and column counts.
+
+### Syntax
+
 ```
 program     ::= instruction* EOF
 
@@ -170,11 +201,11 @@ instruction ::= NUM 'yami'   NUM
               | 'rei'        NUM
               | 'Rei'        NUM
               | 'REI'        NUM
-
-OP          ::= '+' | '-' | '*' | '/' | '%'
-NUM         ::= -?[0-9]+
-LABEL       ::= [a-zA-Z]{1,31}   (not a keyword)
 ```
+
+Register operands (every `NUM` except the literal after `yami`) must be
+non-negative. Each label may be defined only once, and every jump target
+must be defined somewhere in the program.
 
 ---
 

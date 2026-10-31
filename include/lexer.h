@@ -1,14 +1,15 @@
 //
 // Created by erikd on 04.06.26.
-// Refactored by erikd on 29.10.26
+// Refactored by erikd on 29.10.26 and 31.10.26
 //
 
 #pragma once
 #include <stddef.h>
 #include <stdint.h>
+#include <stdbool.h>
 
 typedef enum {
-    TOK_INVALID = 0,
+    TOK_ERROR = 0,
 
     TOK_STORE_LIT,
     TOK_STORE_COPY,
@@ -24,23 +25,31 @@ typedef enum {
     TOK_LABEL,
     TOK_OP,
 
-    TOK_EOF,
-    TOK_ERROR,
+    TOK_EOF, // The token list needs to ALWAYS end with TOK_EOF.
+    LEXER_TOKEN_KIND_COUNT,
 } lexer_token_kind;
 
-#define LEXER_TOKEN_KIND_COUNT 15
-// Note: We might move away from Error as a Token scheme in the future
+typedef enum {
+    TOK_ERR_INVALID = 0, // This should never be emitted
+
+    TOK_ERR_WORD_TOO_LONG,
+    TOK_ERR_INT32_TOO_SMALL,
+    TOK_ERR_INT32_TOO_LARGE,
+    TOK_ERR_UNEXPECTED_CHAR,
+
+    TOK_ERR_KIND_COUNT,
+} lexer_token_error_kind;
 
 typedef struct {
     lexer_token_kind kind;
     uint32_t line, column;
-    const char* text;      // lexeme in source, NOT NUL-terminated
-    uint32_t len;
+    const char* text;               // lexeme in source, NOT NUL-terminated
+    uint32_t len;                   // len of lexeme
 
     union {
-        int32_t     num;   // TOK_NUM
-        char        op;    // TOK_OP
-        const char* error; // TOK_ERROR, static string
+        int32_t     num;            // TOK_NUM
+        char        op;             // TOK_OP
+        lexer_token_error_kind err; // TOK_ERROR
     };
 } lexer_token;
 
@@ -48,6 +57,8 @@ typedef struct {
     lexer_token* tokens;
     size_t token_count;
     size_t error_count;
+    bool out_of_memory;
+    const char* source;
 } lexer_result;
 
 // Note that the lexer_result contains references to the given source. Do not free the source before freeing the lexer result.
@@ -55,4 +66,5 @@ lexer_result lexer_tokenize(const char* source);
 void lexer_free(lexer_result* lr);
 
 const char* lexer_token_kind_name(lexer_token_kind kind);
+const char* lexer_token_err_kind_name_simple(lexer_token_error_kind kind);
 void lexer_dump_tokens(const lexer_result* lr);

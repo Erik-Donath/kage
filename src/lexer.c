@@ -12,28 +12,43 @@
 #include <string.h>
 
 static const char* lexer_token_kind_names[] = {
-    [TOK_INVALID] = "INVALID",
+    [TOK_ERROR]         = "ERROR",
 
-    [TOK_STORE_LIT] = "STORE_LIT",
-    [TOK_STORE_COPY] = "STORE_COPY",
-    [TOK_STORE_ARITH] = "STORE_ARITH",
-    [TOK_FLOW_LABEL] = "FLOW_LABEL",
-    [TOK_FLOW_JUMP] = "FLOW_JUMP",
-    [TOK_FLOW_CJUMP] = "FLOW_CJUMP",
-    [TOK_IO_PUTC] = "IO_PUTC",
-    [TOK_IO_GETC] = "IO_GETC",
-    [TOK_IO_PUTI] = "IO_PUTI",
+    [TOK_STORE_LIT]     = "STORE_LIT",
+    [TOK_STORE_COPY]    = "STORE_COPY",
+    [TOK_STORE_ARITH]   = "STORE_ARITH",
+    [TOK_FLOW_LABEL]    = "FLOW_LABEL",
+    [TOK_FLOW_JUMP]     = "FLOW_JUMP",
+    [TOK_FLOW_CJUMP]    = "FLOW_CJUMP",
+    [TOK_IO_PUTC]       = "IO_PUTC",
+    [TOK_IO_GETC]       = "IO_GETC",
+    [TOK_IO_PUTI]       = "IO_PUTI",
 
-    [TOK_NUM] = "NUM",
-    [TOK_LABEL] = "LABEL",
-    [TOK_OP] = "OP",
+    [TOK_NUM]           = "NUM",
+    [TOK_LABEL]         = "LABEL",
+    [TOK_OP]            = "OP",
 
-    [TOK_EOF] = "EOF",
-    [TOK_ERROR] = "ERROR",
+    [TOK_EOF]           = "EOF",
 };
 
-_Static_assert(sizeof(lexer_token_kind_names) / sizeof(lexer_token_kind_names[0]) == LEXER_TOKEN_KIND_COUNT,
+static const char* lexer_token_err_kind_names_simple[] = {
+    [TOK_ERR_INVALID]         = "Invalid",
+    [TOK_ERR_WORD_TOO_LONG]   = "Given word too long",
+    [TOK_ERR_INT32_TOO_SMALL] = "Given number too small. Min: -2147483648",
+    [TOK_ERR_INT32_TOO_LARGE] = "Given number too large. Max: 2147483647",
+    [TOK_ERR_UNEXPECTED_CHAR] = "Didn't expected given char.",
+};
+
+#define ARRAY_SIZE(arr) (sizeof(arr) / sizeof((arr)[0]))
+_Static_assert(ARRAY_SIZE(lexer_token_kind_names) == LEXER_TOKEN_KIND_COUNT,
     "Lexer: lexer_token_kind_names must be in sync with lexer_token_kind.");
+
+_Static_assert(ARRAY_SIZE(lexer_token_err_kind_names_simple) == TOK_ERR_KIND_COUNT,
+    "Lexer: lexer_token_err_kind_names_simple must be in sync with lexer_token_error_kind.");
+
+static const lexer_token lexer_empty_result[1] = {
+    { .kind = TOK_EOF, .line = 1, .column = 1, .text = NULL, .len = 0 }
+};
 
 #define STR_(x) #x
 #define STR(x)  STR_(x)
@@ -107,10 +122,26 @@ static inline lexer_token make(const lexer_state* s, const char* start, const le
     };
 }
 
-static inline lexer_token make_error(const lexer_state* s, const char* start, const char* msg) {
+static inline lexer_token make_error(const lexer_state* s, const char* start,
+                                     const lexer_token_error_kind error) {
     lexer_token t = make(s, start, TOK_ERROR);
-    t.error = msg;
+    t.err = error;
     return t;
+}
+
+static bool push_new_token(lexer_state* s, const lexer_token t) {
+    if (s->tokens_cap == s->tokens_len) {
+        const size_t new_cap = s->tokens_cap * 2;
+        lexer_token* new_tokens = realloc(s->tokens, sizeof(lexer_token) * new_cap);
+        if (!new_tokens)
+            return false;
+
+        s->tokens = new_tokens;
+        s->tokens_cap = new_cap;
+    }
+
+    s->tokens[s->tokens_len++] = t;
+    return true;
 }
 
 // Tokenizer
@@ -141,25 +172,35 @@ static lexer_token scan_word(lexer_state* s) {
     }
 
     if (len > MAX_LABEL_LEN)
-        return make_error(s, start, "Lexer: Word exceeds maximum length of " STR(MAX_LABEL_LEN) " characters.\n\tHelp: Shorten this label to " STR(MAX_LABEL_LEN) " ASCII letters or fewer.");
+        return make_error(s, start, TOK_ERR_WORD_TOO_LONG);
 
     return make(s, start, TOK_LABEL);
 }
 
 static lexer_token scan_number(lexer_state* s) {
     const char* start = s->cur;
+    const bool neg = (current(s) == '-');
+    if (neg) advance(s);
 
-    char* end;
-    const long long v = strtoll(start, &end, 10);
-    s->cur = end;   // consume whole lexeme
+    uint64_t mag = 0;
+    while (is_digit(current(s))) {
+        if (mag <= (uint64_t)INT32_MAX + 1)
+            mag = mag * 10 + (uint64_t)(current(s) - '0');
+        advance(s);
+    }
 
-    if (v < INT32_MIN || v > INT32_MAX)
-        return make_error(s, start,
-            "Lexer: Integer literal is outside the int32 range.\n\tHelp: Use a value between -2147483648 and 2147483647. For Registers use a value between 0 and 2147483647."
+    const uint64_t limit = neg ? (uint64_t)INT32_MAX + 1 : (uint64_t)INT32_MAX + 0;
+    if (mag > limit) {
+        return make_error(s, start, neg
+            ? TOK_ERR_INT32_TOO_SMALL
+            : TOK_ERR_INT32_TOO_LARGE
         );
+    }
 
     lexer_token t = make(s, start, TOK_NUM);
-    t.num = (int32_t)v;
+    t.num = neg
+        ? (int32_t)-(int64_t)mag
+        : (int32_t)mag;
     return t;
 }
 
@@ -182,9 +223,7 @@ static lexer_token next_token(lexer_state* s) {
     }
 
     advance(s);
-    return make_error(s, start,
-        "Lexer: Unexpected character. \n\tHelp: Remove this character or replace it with a valid Kage token."
-    );
+    return make_error(s, start, TOK_ERR_UNEXPECTED_CHAR);
 }
 
 lexer_result lexer_tokenize(const char* source) {
@@ -199,26 +238,30 @@ lexer_result lexer_tokenize(const char* source) {
     };
     if (!s.tokens) {
         fprintf(stderr, "Lexer: Out of Memory");
-        return (lexer_result){0};
+        return (lexer_result){
+            .tokens = (lexer_token*)lexer_empty_result,
+            .token_count = 1,
+            .error_count = 0,
+            .out_of_memory = true,
+            .source = source,
+        };
     }
 
     for (;;) {
         const lexer_token t = next_token(&s);
+        if (!push_new_token(&s, t)) {
+            free(s.tokens);
 
-        if (s.tokens_cap == s.tokens_len) {
-            const size_t new_cap = s.tokens_cap * 2;
-            lexer_token* new_tokens = realloc(s.tokens, sizeof(lexer_token) * new_cap);
-            if (!new_tokens) {
-                fprintf(stderr, "Lexer: Out of Memory");
-                free(s.tokens);
-                return (lexer_result){0};
-            }
-
-            s.tokens = new_tokens;
-            s.tokens_cap = new_cap;
+            fprintf(stderr, "Lexer: Out of Memory");
+            return (lexer_result){
+                .tokens = (lexer_token*)lexer_empty_result,
+                .token_count = 1,
+                .error_count = 0,
+                .out_of_memory = true,
+                .source = source,
+            };
         }
 
-        s.tokens[s.tokens_len++] = t;
         if (t.kind == TOK_ERROR)
             s.error_count++;
         if (t.kind == TOK_EOF)
@@ -229,20 +272,31 @@ lexer_result lexer_tokenize(const char* source) {
         .tokens = s.tokens,
         .token_count = s.tokens_len,
         .error_count = s.error_count,
+        .out_of_memory = false,
+        .source = source,
     };
 }
 
 void lexer_free(lexer_result* lr) {
-    free(lr->tokens);
-    lr->tokens      = NULL;
-    lr->token_count = 0;
-    lr->error_count = 0;
+    if ((void*)lr->tokens != &lexer_empty_result)
+        free(lr->tokens);
+    lr->tokens          = NULL;
+    lr->token_count     = 0;
+    lr->error_count     = 0;
+    lr->out_of_memory   = false;
+    lr->source          = NULL; // Not owned by lr
 }
 
 const char* lexer_token_kind_name(const lexer_token_kind kind) {
     if ((unsigned)kind >= LEXER_TOKEN_KIND_COUNT || !lexer_token_kind_names[kind])
         return "?";
     return lexer_token_kind_names[kind];
+}
+
+const char* lexer_token_err_kind_name_simple(const lexer_token_error_kind kind) {
+    if ((unsigned)kind >= TOK_ERR_KIND_COUNT || !lexer_token_err_kind_names_simple[kind])
+        return "?";
+    return lexer_token_err_kind_names_simple[kind];
 }
 
 void lexer_dump_tokens(const lexer_result* lr) {
@@ -282,7 +336,7 @@ void lexer_dump_tokens(const lexer_result* lr) {
             printf("op='%c'", t->op);
             break;
         case TOK_ERROR:
-            printf("error=\"%.*s\"", (int)strcspn(t->error, "\n"), t->error);
+            printf("error=\"%s\"", lexer_token_err_kind_name_simple(t->err));
             break;
         default:
             break;
@@ -292,5 +346,7 @@ void lexer_dump_tokens(const lexer_result* lr) {
     }
 
     printf("\n%zu tokens, %zu errors\n", lr->token_count, lr->error_count);
+    if (lr->out_of_memory)
+        printf("LEXER ran out of memory doing tokenization!\n");
     printf("=== END TOKENS ===\n\n");
 }
