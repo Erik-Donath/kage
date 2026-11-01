@@ -9,6 +9,7 @@
 #include <stddef.h>
 #include <stdint.h>
 #include <stdbool.h>
+#include <stdio.h>
 
 typedef enum {
     DIAG_ERROR   = 0x1,
@@ -42,8 +43,27 @@ typedef enum {
     DIAG_LABEL_REDEFINED,
     DIAG_LABEL_UNDEFINED,
 
+    // warnings
+    DIAG_LABEL_UNUSED,
+
     DIAG_CODE_COUNT,
 } diag_code;
+
+// What parser was trying to read
+typedef enum {
+    EXPECT_INSTRUCTION      = DIAG_EXPECTED_INSTRUCTION,
+    EXPECT_STORE_KEYWORD    = DIAG_EXPECTED_STORE_KEYWORD, // after a leading register number
+    EXPECT_REGISTER         = DIAG_EXPECTED_REGISTER,
+    EXPECT_LITERAL          = DIAG_EXPECTED_LITERAL,
+    EXPECT_OPERATOR         = DIAG_EXPECTED_OPERATOR,
+    EXPECT_LABEL            = DIAG_EXPECTED_LABEL,
+} diag_expect; // Acts as a subset of diag_code.
+
+// The statement being parsed when something unexpected came up.
+typedef struct {
+    const lexer_token* head;
+    const lexer_token* keyword;
+} diag_stmt;
 
 typedef struct {
     diag_code     code;
@@ -52,50 +72,30 @@ typedef struct {
     uint32_t line, column, len;
     const char* text;
 
-    uint32_t note_line, note_column;
+    uint32_t note_line, note_column, note_len;
+    const char* note_text; // NULL = no note
+
+    lexer_token_kind stmt_kind;
 } diag;
-
-// What parser was trying to read
-typedef enum {
-    EXPECT_INSTRUCTION,
-    EXPECT_STORE_KEYWORD, // after a leading register number
-    EXPECT_REGISTER,
-    EXPECT_LITERAL,
-    EXPECT_OPERATOR,
-    EXPECT_LABEL,
-} diag_expect;
-
-typedef struct {
-    const lexer_token* head;
-    const lexer_token* keyword;
-} diag_stmt;
-
-// Used for adjacent errors that the parser found. For example: "unexpected char, unexpected char, ..."
-typedef struct {
-    uint32_t line, column, len;
-    const char* text;
-} diag_span;
 
 typedef struct {
     diag* items;
     size_t len, cap;
     size_t error_count, warning_count;
-    const char* source;
-    bool diag_out_of_memory; // Should be checked by caller frequently. If true no new diag will be added to the existing list.
+    bool diag_out_of_memory;  // If true, no new diagnostics are added. Check once after a stage is done: the list is still valid, but incomplete.
 } diag_list;
 
-void diag_list_init(diag_list* dl, const char* source);
+void diag_list_init(diag_list* dl);
 void diag_list_free(diag_list* dl);
 
 // Report functions (append on prev calls)
+void diag_report(diag_list* dl, diag_code code, const lexer_token* at);
 void diag_unexpected(diag_list* dl, diag_expect expected, const lexer_token* got, const diag_stmt* stmt);
-void diag_unexpected_chars(diag_list* dl, const diag_span* span);
-void diag_skipped_tokens(diag_list* dl, const lexer_token* err); // errors that are skipped during resync in the parser.
-void diag_label_redefined(diag_list* dl, const lexer_token* again, const lexer_token* first);
-void diag_label_undefined(diag_list* dl, const lexer_token* use);
-void diag_register_out_of_range(diag_list* dl, const lexer_token* num);
+void diag_report_span(diag_list* dl, diag_code code, const lexer_token* start, uint32_t text_len);
+void diag_report_note(diag_list* dl, diag_code code, const lexer_token* at, const lexer_token* note_at);
 
 // Outputs
-// TODO: Implement printing to file and printing with color. NOTE: if source_filename is NULL we assume that there is no source file e.g. kage code came from -e flag.
-void diag_render(const diag_list* dl, diag_severity kinds, const char* source_filename);
+// TODO: Printing with color.
+// NOTE: If source_filename is NULL we assume that there is no source file e.g. kage code came from -e flag input.
+void diag_render(const diag_list* dl, diag_severity kinds, const char* source_filename, FILE* stream);
 const char* diag_code_name(diag_code code);
