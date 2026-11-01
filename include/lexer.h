@@ -57,14 +57,13 @@ typedef struct {
     lexer_token* tokens;
     size_t token_count;
     size_t error_count;
-    bool out_of_memory;
     const char* source;
 } lexer_result;
 
-// Note that the lexer_result contains references to the given source. Do not free the source before freeing the lexer result.
-lexer_result lexer_tokenize(const char* source);
+// Note that the lexer_result contains references to the given source. Do not free the source before freeing the lexer result. Returning false means that a critical error was hit. For example an Out of Memory error during Tokenization. It will return true even when the lexer_result contains Error Tokens.
+bool lexer_tokenize(const char* source, lexer_result* out);
 void lexer_free(lexer_result* lr);
 
 const char* lexer_token_kind_name(lexer_token_kind kind);
-const char* lexer_token_err_kind_name_simple(lexer_token_error_kind kind);
+const char* lexer_token_err_kind_name(lexer_token_error_kind kind);
 void lexer_dump_tokens(const lexer_result* lr);
