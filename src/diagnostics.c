@@ -109,8 +109,28 @@ static const diag_info diag_table[] = {
 };
 #undef D
 
+static const char* const usage_table[] = {
+    [TOK_ERROR]       = "",
+
+    [TOK_STORE_LIT]   = "R yami N       store literal N in register R",
+    [TOK_STORE_COPY]  = "R Yami S       copy register S into register R",
+    [TOK_STORE_ARITH] = "R YAMI S op T  R = S op T, where op is one of + - * / %",
+    [TOK_FLOW_LABEL]  = "hikari L       define label L",
+    [TOK_FLOW_JUMP]   = "Hikari L       jump to label L",
+    [TOK_FLOW_CJUMP]  = "HIKARI L S     jump to L if register S is not zero",
+    [TOK_IO_PUTC]     = "rei S          print register S as a character (0 ends the program)",
+    [TOK_IO_GETC]     = "Rei S          read a character into register S",
+    [TOK_IO_PUTI]     = "REI S          print register S as a number",
+
+    [TOK_NUM]         = "",
+    [TOK_LABEL]       = "",
+    [TOK_OP]          = "",
+    [TOK_EOF]         = "",
+};
+
 #define ARRAY_SIZE(arr) (sizeof(arr) / sizeof((arr)[0]))
 _Static_assert(ARRAY_SIZE(diag_table) == DIAG_CODE_COUNT, "Diagnostics: diag_table must be in sync with diag_code.");
+_Static_assert(ARRAY_SIZE(usage_table) == LEXER_TOKEN_KIND_COUNT, "Diagnostics: usage_table must be in sync with lexer_token_kind.");
 
 // Helpers
 
@@ -199,30 +219,8 @@ static diag_code code_for(const diag_expect expected, const lexer_token* got) {
     return (diag_code)expected; // We can cast since diag_expect is defined as a subset of diag_code.
 }
 
-//TODO: Use a LUT instead of manuel switching
 static const char* usage_of(const lexer_token_kind kind) {
-    switch (kind) {
-    case TOK_STORE_LIT:
-        return "R yami N       store literal N in register R";
-    case TOK_STORE_COPY:
-        return "R Yami S       copy register S into register R";
-    case TOK_STORE_ARITH:
-        return "R YAMI S op T  R = S op T, where op is one of + - * / %";
-    case TOK_FLOW_LABEL:
-        return "hikari L       define label L";
-    case TOK_FLOW_JUMP:
-        return "Hikari L       jump to label L";
-    case TOK_FLOW_CJUMP:
-        return "HIKARI L S     jump to L if register S is not zero";
-    case TOK_IO_PUTC:
-        return "rei S          print register S as a character (0 ends the program)";
-    case TOK_IO_GETC:
-        return "Rei S          read a character into register S";
-    case TOK_IO_PUTI:
-        return "REI S          print register S as a number";
-    default:
-        return NULL;
-    }
+    return (unsigned)kind < LEXER_TOKEN_KIND_COUNT ? usage_table[kind] : NULL;
 }
 
 void diag_list_init(diag_list* dl) {

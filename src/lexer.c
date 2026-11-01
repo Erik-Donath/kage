@@ -13,7 +13,7 @@
 
 #define D(kind) [kind] = #kind
 
-static const char* lexer_token_kind_names[] = {
+static const char* const lexer_token_kind_names[] = {
     D(TOK_ERROR),
 
     D(TOK_STORE_LIT),
@@ -33,7 +33,7 @@ static const char* lexer_token_kind_names[] = {
     D(TOK_EOF),
 };
 
-static const char* lexer_token_err_kind_names[] = {
+static const char* const lexer_token_err_kind_names[] = {
     D(TOK_ERR_INVALID),
     D(TOK_ERR_WORD_TOO_LONG),
     D(TOK_ERR_INT32_TOO_SMALL),
