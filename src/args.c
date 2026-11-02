@@ -4,6 +4,10 @@
 
 #include "args.h"
 
+#include <errno.h>
+#include <inttypes.h>
+#include <stdbool.h>
+#include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -18,8 +22,10 @@ args parse_args(const int argc, const char* argv[]) {
     args a = (args){
         .flags = 0x0,
         .file = NULL,
+        .code = NULL,
         .max_steps = 0,
         .input = NULL,
+        .output = NULL,
     };
 
     for (int i = 1; i < argc; ++i) {
@@ -40,7 +46,10 @@ args parse_args(const int argc, const char* argv[]) {
                 exit(EXIT_FAILURE);
             }
 
-            // Might add a check if code was already given with -e or file?
+            if ((a.flags & CODE) || a.file != NULL) {
+                fprintf(stderr, "Error: source code or file was specified more than once\n");
+                exit(EXIT_FAILURE);
+            }
 
             a.flags |= CODE;
             a.code = argv[i];
@@ -53,6 +62,10 @@ args parse_args(const int argc, const char* argv[]) {
                 exit(EXIT_FAILURE);
             }
 
+            if (a.flags & INPUT) {
+                fprintf(stderr, "Error: input file was specified more than once\n");
+                exit(EXIT_FAILURE);
+            }
             a.flags |= INPUT;
             a.input = argv[i];
             continue;
@@ -64,6 +77,10 @@ args parse_args(const int argc, const char* argv[]) {
                 exit(EXIT_FAILURE);
             }
 
+            if (a.flags & OUTPUT) {
+                fprintf(stderr, "Error: output file was specified more than once\n");
+                exit(EXIT_FAILURE);
+            }
             a.flags |= OUTPUT;
             a.output = argv[i];
             continue;
@@ -78,16 +95,30 @@ args parse_args(const int argc, const char* argv[]) {
                 fprintf(stderr, "Error: --max-steps requires an argument\n");
                 exit(EXIT_FAILURE);
             }
+            if (a.flags & MAX_STEPS) {
+                fprintf(stderr, "Error: --max-steps was specified more than once\n");
+                exit(EXIT_FAILURE);
+            }
 
+            const char* value = argv[i];
+            bool digits_only = value[0] != '\0';
+            for (size_t j = 0; value[j] != '\0'; ++j) {
+                if (value[j] < '0' || value[j] > '9') {
+                    digits_only = false;
+                    break;
+                }
+            }
+
+            errno = 0;
             char* end;
-            const long val = strtol(argv[i], &end, 10);
-            if (*end != '\0' || val < 0) {
+            const uintmax_t parsed = strtoumax(value, &end, 10);
+            if (!digits_only || errno == ERANGE || *end != '\0' || parsed > SIZE_MAX) {
                 fprintf(stderr, "Error: --max-steps requires a non-negative integer\n");
                 exit(EXIT_FAILURE);
             }
 
             a.flags |= MAX_STEPS;
-            a.max_steps = (size_t)val;
+            a.max_steps = (size_t)parsed;
             continue;
         }
         if (arg[0] == '-') {

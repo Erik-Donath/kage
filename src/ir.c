@@ -6,14 +6,11 @@
 #include <stdlib.h>
 #include <stdio.h>
 
-void ir_arr_init(ir_arr* arr, const size_t length) {
-    arr->instruction = malloc(sizeof(ir_instruction) * length);
-    arr->length = length;
-}
-
 void ir_arr_free(ir_arr* arr) {
     free(arr->instruction);
+    arr->instruction = NULL;
     arr->length = 0;
+    arr->register_count = 0;
 }
 
 const char* ir_type_names[] = {

@@ -19,3 +19,20 @@ rei 1234
 
 # Loop back
 Hikari printOneInf
+
+# --- unexpected characters ---
+@ $ ! ? ,
+my_label
+é
+
+# --- integer out of range ---
+2147483648
+-2147483649
+99999999999999999999
+
+# --- label too long (32 letters) ---
+hikari abcdefghijklmnopqrstuvwxyzabcdef
+
+# --- valid boundary values: these must NOT produce errors ---
+2147483647 -2147483648
+abcdefghijklmnopqrstuvwxyzabcde

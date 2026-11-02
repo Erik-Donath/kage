@@ -6,7 +6,7 @@ Kage is a minimal register-based esoteric programming language. Programs are seq
 
 ## Registers
 
-Every register holds a 32-bit signed integer in the range -2,147,483,648 to 2,147,483,647. Registers are identified by non-negative integers and are lazily initialized to `0`.
+Every register holds a 32-bit signed integer in the range -2,147,483,648 to 2,147,483,647. Registers are identified by non-negative integer addresses and are lazily initialized to `0`. Negative register addresses and integer literals outside this range are errors.
 
 Register 0 is the zero register. Reading it always returns `0`. Writing to it is silently ignored. It cannot be repurposed.
 
@@ -158,6 +158,37 @@ Invalid: `yami` (keyword), `loop2` (contains digit), `my_label` (contains unders
 
 ## Grammar
 
+### Lexical structure
+
+A program is a sequence of tokens separated by whitespace and comments.
+Tokens are matched greedily: the longest possible match wins. Whitespace is
+only required between two tokens that would otherwise merge into one.
+
+```
+whitespace  ::= ' ' | '\t' | '\n' | '\r' | '\v' | '\f'
+comment     ::= '#' [^\n]*            (acts as whitespace)
+
+NUM         ::= '-'? [0-9]+           (must fit in a 32-bit signed integer)
+WORD        ::= [a-zA-Z]+             (longest run of letters)
+KEYWORD     ::= 'yami' | 'Yami' | 'YAMI'
+              | 'hikari' | 'Hikari' | 'HIKARI'
+              | 'rei' | 'Rei' | 'REI'
+LABEL       ::= WORD                  (not a KEYWORD, at most 31 letters)
+OP          ::= '+' | '-' | '*' | '/' | '%'
+```
+
+Notes:
+
+- A `-` immediately followed by a digit begins a `NUM`. `3 YAMI 1 - 2` is a
+  subtraction, but `3 YAMI 1 -2` and `3 YAMI 1-2` are not.
+- A word ends at the first non-letter and a number at the first non-digit, so
+  `1yami 5` equals `1 yami 5`, and `loop2` is the label `loop` followed by `2`.
+- Whitespace and comments can never appear inside a token, so `lo op` is two labels.
+- Any other character is a lexical error.
+- `\v` and `\f` are counted as one char for line and column counts.
+
+### Syntax
+
 ```
 program     ::= instruction* EOF
 
@@ -170,23 +201,11 @@ instruction ::= NUM 'yami'   NUM
               | 'rei'        NUM
               | 'Rei'        NUM
               | 'REI'        NUM
-
-OP          ::= '+' | '-' | '*' | '/' | '%'
-NUM         ::= -?[0-9]+
-LABEL       ::= [a-zA-Z]{1,31}   (not a keyword)
 ```
 
----
-
-## Errors
-
-| Error      | Cause                                                                |
-|------------|----------------------------------------------------------------------|
-| LexerError | Unknown character; word that is neither a keyword nor a valid label  |
-| ParseError | Unexpected token or incomplete instruction                           |
-| LabelError | Jump to a label that was never defined; label defined more than once |
-
-All errors report the line and column where the problem was detected.
+Register operands (every `NUM` except the literal after `yami`) must be
+non-negative. Each label may be defined only once, and every jump target
+must be defined somewhere in the program.
 
 ---
 

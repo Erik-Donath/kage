@@ -19,10 +19,8 @@ typedef struct {
     args_flags flags;
     size_t max_steps;
 
-    union {
-        const char* file;
-        const char* code;
-    };
+    const char* file;
+    const char* code;
     const char* input;
     const char* output;
 } args;

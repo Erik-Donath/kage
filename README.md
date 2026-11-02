@@ -16,7 +16,7 @@ Kage is a minimal register-based esoteric programming language built around thre
 | Hikari  | `hikari`, `Hikari`, `HIKARI` |
 | Rei     | `rei`, `Rei`, `REI`        |
 
-Programs operate on an infinite set of lazily initialized 32-bit registers, featuring arithmetic operations, conditional jumps, character I/O, and a dedicated zero register.
+Programs operate on an unbounded set of lazily initialized 32-bit registers, featuring arithmetic operations, conditional jumps, character I/O, and a dedicated zero register. Register addresses must be non-negative; register `0` is a dedicated zero register.
 
 Read [Language.md](Language.md) for a complete language reference.
 Read [Implementation.md](Implementation.md) for a breakdown of the interpreter internals.
@@ -53,7 +53,14 @@ git clone https://github.com/Erik-Donath/kage.git
 cd kage
 cmake -B build -DCMAKE_BUILD_TYPE=Release
 cmake --build build --config Release
+ctest --test-dir build --output-on-failure
 ```
+
+The test suite uses CTest to run Kage programs and verify their exact output, including integer-boundary behavior and expected diagnostics. It does not add a C++ or GoogleTest dependency to this C project.
+
+### VS Code
+
+Open the project folder in VS Code and install the recommended extensions when prompted. CMake Tools configures a Debug build in `build/vscode`, and its CMake view can be used to build the project and run the CTest suite. Select the `kage` launch target and press F5 to debug the arithmetic example with GDB. The C/C++ extension uses the generated compile commands for IntelliSense, runs clang-tidy on save, and formats C files with the repository's `.clang-format` style.
 
 ### Run
 
@@ -64,6 +71,8 @@ cmake --build build --config Release
 ./build/kage --verbose test.kage
 ./build/kage --max-steps 1000 test.kage
 ```
+
+The instruction limit is a runtime guard: if a program has not terminated when the limit is reached, Kage reports an error and exits unsuccessfully.
 
 ## License
 

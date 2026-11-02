@@ -5,6 +5,11 @@
 *.txt    text eol=lf
 *.yml    text eol=lf
 *.yaml   text eol=lf
+*.cmake  text eol=lf
+*.input  text eol=lf
+*.output text eol=lf
+*.kage   text eol=lf
+CMakeLists.txt text eol=lf
 
 # Windows executables are binary
 *.exe    binary
