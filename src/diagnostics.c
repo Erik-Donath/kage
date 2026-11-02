@@ -70,10 +70,6 @@ static const diag_info diag_table[] = {
         "expected a label name, found '%.*s'",
         "labels consist only of letters (at most 31) and must not be a keyword",
         NULL),
-    D(DIAG_MISSING_SPACE_AFTER_MINUS, DIAG_ERROR,
-        "'%.*s' is read as a negative number, not as a subtraction",
-        "to subtract, put a space after '-' (for example: 3 YAMI 1 - 2)",
-        NULL),
     D(DIAG_LABEL_HAS_DIGITS, DIAG_ERROR,
         "digits directly after a label are not part of it ('%.*s')",
         "labels consist only of letters; remove the digits",
@@ -110,7 +106,7 @@ static const diag_info diag_table[] = {
 #undef D
 
 static const char* const usage_table[] = {
-    [TOK_ERROR]       = "",
+    [TOK_ERROR]       = NULL,
 
     [TOK_STORE_LIT]   = "R yami N       store literal N in register R",
     [TOK_STORE_COPY]  = "R Yami S       copy register S into register R",
@@ -122,10 +118,10 @@ static const char* const usage_table[] = {
     [TOK_IO_GETC]     = "Rei S          read a character into register S",
     [TOK_IO_PUTI]     = "REI S          print register S as a number",
 
-    [TOK_NUM]         = "",
-    [TOK_LABEL]       = "",
-    [TOK_OP]          = "",
-    [TOK_EOF]         = "",
+    [TOK_NUM]         = NULL,
+    [TOK_LABEL]       = NULL,
+    [TOK_OP]          = NULL,
+    [TOK_EOF]         = NULL,
 };
 
 #define ARRAY_SIZE(arr) (sizeof(arr) / sizeof((arr)[0]))
@@ -209,12 +205,8 @@ static diag_code code_for(const diag_expect expected, const lexer_token* got) {
         }
     }
 
-    if (got->kind == TOK_NUM) {
-        if (expected == EXPECT_REGISTER && got->num < 0)
-            return DIAG_REGISTER_NEGATIVE;
-        if (expected == EXPECT_OPERATOR && got->num <= 0) // This works for "3 -0" as well.
-            return DIAG_MISSING_SPACE_AFTER_MINUS; // For example "1 -2" instead of "1 - 2"
-    }
+    if (got->kind == TOK_NUM && expected == EXPECT_REGISTER && got->num < 0)
+        return DIAG_REGISTER_NEGATIVE;
 
     return (diag_code)expected; // We can cast since diag_expect is defined as a subset of diag_code.
 }
